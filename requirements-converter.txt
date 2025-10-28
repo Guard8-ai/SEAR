@@ -1,0 +1,15 @@
+# Document Converter Dependencies
+# Install with: pip install -r requirements-converter.txt
+# Or use: pip install -e ".[converter]"
+
+pdfplumber>=0.10.0
+pdf2image>=1.16.0
+pytesseract>=0.3.10
+python-bidi>=0.4.2
+Pillow>=10.0.0
+python-docx>=1.0.0
+
+# Note: PDF OCR support also requires Tesseract OCR to be installed:
+# Ubuntu/Debian: sudo apt-get install tesseract-ocr tesseract-ocr-heb tesseract-ocr-eng
+# macOS: brew install tesseract tesseract-lang
+# Windows: Download from https://github.com/UB-Mannheim/tesseract/wiki
