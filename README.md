@@ -24,6 +24,19 @@ Query → Embed → Parallel FAISS Search → Top Chunks → LLM Synthesis → A
 
 **Note on Determinism**: FAISS retrieval is 100% deterministic (identical sources every time). LLM generation with `temp=0, seed=42` is highly consistent (~95%) but not perfectly deterministic due to floating-point arithmetic and model internals.
 
+## Claude Code Skill
+
+**Make SEAR available to Claude Code for automatic invocation:**
+
+```bash
+# Install the SEAR skill
+cp -r claude-skill ~/.claude/skills/sear
+```
+
+When installed, Claude will automatically recognize when you need document search, RAG, or PDF/DOCX conversion and guide you through using SEAR.
+
+**Learn more:** See [claude-skill/README.md](claude-skill/README.md)
+
 ## Quick Start
 
 ### 1. Install
