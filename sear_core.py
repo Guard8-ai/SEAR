@@ -1608,3 +1608,460 @@ def merge_adjacent_chunks(chunks):
         merged.append(current)
 
     return merged
+
+
+# =============================================================================
+# Task 3: JSON Query Executor
+# =============================================================================
+
+def _retrieve_chunks_only(query, corpuses=None, min_score=0.3, max_results=None, use_gpu=None, verbose=False):
+    """
+    Internal function to retrieve chunks without LLM processing.
+
+    This is a lightweight version of extract_relevant_content that returns
+    chunks directly without writing to file.
+
+    Args:
+        query: Search query string
+        corpuses: List of corpus names to search (None = all)
+        min_score: Minimum similarity threshold (default: 0.3)
+        max_results: Maximum number of results to return (default: None = unlimited)
+        use_gpu: GPU usage (None=auto, True=force, False=disable)
+        verbose: Print progress messages
+
+    Returns:
+        list: List of chunk dicts with keys: corpus, location, score, chunk
+    """
+    # Determine GPU usage
+    if use_gpu is None:
+        use_gpu = GPU_AVAILABLE
+    elif use_gpu and not GPU_AVAILABLE:
+        if verbose:
+            print("⚠️  GPU requested but not available, falling back to CPU")
+        use_gpu = False
+
+    # Determine which corpuses to search
+    if corpuses is None:
+        corpuses = list_corpuses()
+        if not corpuses:
+            raise ValueError("No corpuses available. Please index a file first.")
+
+    # Validate corpus compatibility
+    common_settings = validate_corpus_compatibility(corpuses)
+
+    # Validate query length
+    context_length = common_settings.get('context_length', 256)
+    query_tokens = estimate_tokens(query)
+
+    if query_tokens > context_length:
+        chars_per_token = len(query) / query_tokens if query_tokens > 0 else 4
+        recommended_chars = int(context_length * chars_per_token * 0.9)
+        raise ValueError(
+            f"Query too long ({query_tokens} tokens, max: {context_length}). "
+            f"Please use max ~{recommended_chars} characters."
+        )
+
+    # Load corpus indices
+    corpus_data = []
+    for corpus_name in corpuses:
+        paths = get_corpus_paths(corpus_name)
+
+        # Load FAISS index
+        cpu_index = faiss.read_index(str(paths['index']))
+
+        # Transfer to GPU if enabled
+        if use_gpu:
+            index = index_cpu_to_gpu(cpu_index)
+        else:
+            index = cpu_index
+
+        # Load chunks data
+        with open(paths['chunks'], 'rb') as f:
+            chunks_data = pickle.load(f)
+
+        corpus_data.append({
+            'name': corpus_name,
+            'index': index,
+            'chunks': chunks_data['chunks'],
+            'line_ranges': chunks_data['line_ranges'],
+            'source': chunks_data['source']
+        })
+
+    # Prepare query embedding
+    query_emb = ollama_embed(query)
+    query_emb = np.array([query_emb]).astype('float32')
+
+    # Normalize query if corpuses use normalized embeddings
+    if common_settings.get('normalized', True):
+        faiss.normalize_L2(query_emb)
+
+    # Search all corpuses
+    large_k = 10000 if max_results is None else max_results * 2
+    all_results = []
+
+    for corpus in corpus_data:
+        # Get results up to index size
+        k = min(large_k, corpus['index'].ntotal)
+        distances, indices = corpus['index'].search(query_emb, k)
+
+        for idx, score in zip(indices[0], distances[0]):
+            # Filter by minimum score threshold
+            if score >= min_score:
+                chunk = corpus['chunks'][idx]
+                line_range = corpus['line_ranges'][idx]
+                source = corpus['source']
+
+                all_results.append({
+                    'corpus': corpus['name'],
+                    'location': f"{source}:{line_range[0]}-{line_range[1]}",
+                    'score': float(score),
+                    'chunk': chunk
+                })
+
+    # Sort by score (highest first)
+    all_results.sort(key=lambda x: x['score'], reverse=True)
+
+    # Limit results if requested
+    if max_results is not None:
+        all_results = all_results[:max_results]
+
+    return all_results
+
+
+def execute_query(query_spec, use_gpu=None, verbose=False):
+    """
+    Execute a JSON-formatted boolean query on SEAR corpuses.
+
+    Supports complex nested boolean operations combining multiple queries.
+
+    Query Format:
+        Simple query (just retrieve):
+        {
+            "query": "authentication security",
+            "corpuses": ["backend", "docs"],  # optional
+            "min_score": 0.3,                 # optional, default 0.3
+            "max_results": 100,               # optional, default None
+            "sort": true,                     # optional, default true
+            "merge_adjacent": true            # optional, default true
+        }
+
+        Union (combine multiple queries):
+        {
+            "operation": "union",
+            "queries": ["security authentication", "user login"]
+        }
+
+        Intersect (overlapping results only):
+        {
+            "operation": "intersect",
+            "queries": ["API endpoints", "security"]
+        }
+
+        Difference (exclude results):
+        {
+            "operation": "difference",
+            "query": "security patterns",
+            "exclude": "deprecated legacy"
+        }
+
+        Nested operations:
+        {
+            "operation": "difference",
+            "left": {
+                "operation": "union",
+                "queries": ["security", "authentication"]
+            },
+            "right": {
+                "query": "deprecated"
+            }
+        }
+
+    Args:
+        query_spec: Dict containing query specification (see format above)
+        use_gpu: Enable GPU acceleration (None=auto, True=force, False=disable)
+        verbose: Print execution details
+
+    Returns:
+        list: Processed chunks with keys: corpus, location, score, chunk
+
+    Raises:
+        ValueError: If query format is invalid or required fields missing
+
+    Example:
+        >>> # Simple union query
+        >>> query = {
+        ...     "operation": "union",
+        ...     "queries": ["authentication", "authorization"],
+        ...     "corpuses": ["backend"],
+        ...     "min_score": 0.35
+        ... }
+        >>> results = execute_query(query, verbose=True)
+
+        >>> # Complex nested query: (A ∪ B) - C
+        >>> query = {
+        ...     "operation": "difference",
+        ...     "left": {
+        ...         "operation": "union",
+        ...         "queries": ["security patterns", "best practices"]
+        ...     },
+        ...     "right": {
+        ...         "query": "deprecated outdated"
+        ...     },
+        ...     "sort": True,
+        ...     "merge_adjacent": True
+        ... }
+        >>> results = execute_query(query, verbose=True)
+    """
+    import json
+
+    # Validate input is a dict
+    if not isinstance(query_spec, dict):
+        raise ValueError("query_spec must be a dictionary")
+
+    # Extract common options with defaults
+    options = {
+        'corpuses': query_spec.get('corpuses', None),
+        'min_score': query_spec.get('min_score', 0.3),
+        'max_results': query_spec.get('max_results', None),
+        'sort': query_spec.get('sort', True),
+        'merge_adjacent': query_spec.get('merge_adjacent', True)
+    }
+
+    if verbose:
+        print(f"📋 Executing query with options: {options}")
+
+    # Recursive query execution
+    def _execute_node(node, depth=0):
+        """Recursively execute a query node."""
+        indent = "  " * depth
+
+        if verbose:
+            print(f"{indent}🔍 Processing node at depth {depth}")
+
+        # Check if this is a simple query (no operation)
+        if 'operation' not in node:
+            # Simple query - just retrieve chunks
+            if 'query' not in node:
+                raise ValueError("Query node must have either 'operation' or 'query' field")
+
+            query_str = node['query']
+            if verbose:
+                print(f"{indent}  📝 Simple query: '{query_str}'")
+
+            results = _retrieve_chunks_only(
+                query=query_str,
+                corpuses=options['corpuses'],
+                min_score=options['min_score'],
+                max_results=options['max_results'],
+                use_gpu=use_gpu,
+                verbose=False
+            )
+
+            if verbose:
+                print(f"{indent}  ✓ Retrieved {len(results)} chunks")
+
+            return results
+
+        # Operation-based query
+        operation = node['operation'].lower()
+
+        if operation == 'union':
+            # Union: combine multiple queries
+            if 'queries' not in node:
+                raise ValueError("Union operation requires 'queries' field")
+
+            queries = node['queries']
+            if not isinstance(queries, list) or len(queries) < 2:
+                raise ValueError("Union requires at least 2 queries")
+
+            if verbose:
+                print(f"{indent}  ∪ Union of {len(queries)} queries")
+
+            # Execute each query
+            result_sets = []
+            for i, q in enumerate(queries):
+                if isinstance(q, str):
+                    # Simple string query
+                    if verbose:
+                        print(f"{indent}    Query {i+1}: '{q}'")
+                    results = _retrieve_chunks_only(
+                        query=q,
+                        corpuses=options['corpuses'],
+                        min_score=options['min_score'],
+                        max_results=options['max_results'],
+                        use_gpu=use_gpu,
+                        verbose=False
+                    )
+                elif isinstance(q, dict):
+                    # Nested query
+                    if verbose:
+                        print(f"{indent}    Query {i+1}: <nested>")
+                    results = _execute_node(q, depth + 2)
+                else:
+                    raise ValueError(f"Query must be string or dict, got {type(q)}")
+
+                if verbose:
+                    print(f"{indent}      → {len(results)} chunks")
+                result_sets.append(results)
+
+            # Apply union operation
+            combined = union_results(result_sets)
+            if verbose:
+                print(f"{indent}  ✓ Union result: {len(combined)} chunks")
+
+            return combined
+
+        elif operation == 'intersect':
+            # Intersect: overlapping results only
+            if 'queries' not in node:
+                raise ValueError("Intersect operation requires 'queries' field")
+
+            queries = node['queries']
+            if not isinstance(queries, list) or len(queries) < 2:
+                raise ValueError("Intersect requires at least 2 queries")
+
+            if verbose:
+                print(f"{indent}  ∩ Intersect of {len(queries)} queries")
+
+            # Execute each query
+            result_sets = []
+            for i, q in enumerate(queries):
+                if isinstance(q, str):
+                    if verbose:
+                        print(f"{indent}    Query {i+1}: '{q}'")
+                    results = _retrieve_chunks_only(
+                        query=q,
+                        corpuses=options['corpuses'],
+                        min_score=options['min_score'],
+                        max_results=options['max_results'],
+                        use_gpu=use_gpu,
+                        verbose=False
+                    )
+                elif isinstance(q, dict):
+                    if verbose:
+                        print(f"{indent}    Query {i+1}: <nested>")
+                    results = _execute_node(q, depth + 2)
+                else:
+                    raise ValueError(f"Query must be string or dict, got {type(q)}")
+
+                if verbose:
+                    print(f"{indent}      → {len(results)} chunks")
+                result_sets.append(results)
+
+            # Apply intersect operation (pairwise for multiple sets)
+            # Start with first set, then intersect with each subsequent set
+            combined = result_sets[0]
+            for i in range(1, len(result_sets)):
+                combined = intersect_results(combined, result_sets[i])
+
+            if verbose:
+                print(f"{indent}  ✓ Intersect result: {len(combined)} chunks")
+
+            return combined
+
+        elif operation == 'difference':
+            # Difference: A - B (exclude B from A)
+            # Support two formats:
+            # 1. "left"/"right" for nested operations
+            # 2. "query"/"exclude" for simple queries
+
+            if 'left' in node and 'right' in node:
+                # Nested format
+                if verbose:
+                    print(f"{indent}  - Difference (left - right)")
+                    print(f"{indent}    Left operand:")
+
+                left_results = _execute_node(node['left'], depth + 2)
+
+                if verbose:
+                    print(f"{indent}      → {len(left_results)} chunks")
+                    print(f"{indent}    Right operand:")
+
+                right_results = _execute_node(node['right'], depth + 2)
+
+                if verbose:
+                    print(f"{indent}      → {len(right_results)} chunks")
+
+            elif 'query' in node and 'exclude' in node:
+                # Simple format
+                main_query = node['query']
+                exclude_query = node['exclude']
+
+                if verbose:
+                    print(f"{indent}  - Difference")
+                    print(f"{indent}    Main query: '{main_query}'")
+
+                left_results = _retrieve_chunks_only(
+                    query=main_query,
+                    corpuses=options['corpuses'],
+                    min_score=options['min_score'],
+                    max_results=options['max_results'],
+                    use_gpu=use_gpu,
+                    verbose=False
+                )
+
+                if verbose:
+                    print(f"{indent}      → {len(left_results)} chunks")
+                    print(f"{indent}    Exclude query: '{exclude_query}'")
+
+                right_results = _retrieve_chunks_only(
+                    query=exclude_query,
+                    corpuses=options['corpuses'],
+                    min_score=options['min_score'],
+                    max_results=options['max_results'],
+                    use_gpu=use_gpu,
+                    verbose=False
+                )
+
+                if verbose:
+                    print(f"{indent}      → {len(right_results)} chunks")
+            else:
+                raise ValueError(
+                    "Difference operation requires either 'left'/'right' or 'query'/'exclude' fields"
+                )
+
+            # Apply difference operation
+            result = difference_results(left_results, right_results)
+
+            if verbose:
+                print(f"{indent}  ✓ Difference result: {len(result)} chunks")
+
+            return result
+
+        else:
+            raise ValueError(f"Unknown operation: {operation}. Supported: union, intersect, difference")
+
+    # Execute the query tree
+    if verbose:
+        print("=" * 80)
+        print("🚀 Starting query execution")
+        print("=" * 80)
+
+    results = _execute_node(query_spec)
+
+    if verbose:
+        print("=" * 80)
+        print(f"✓ Query execution complete: {len(results)} total chunks")
+
+    # Post-processing: sort and merge if requested
+    if options['sort'] and len(results) > 0:
+        if verbose:
+            print("📊 Sorting results by document order...")
+        results = sort_by_document_order(results)
+        if verbose:
+            print(f"  ✓ Sorted {len(results)} chunks")
+
+    if options['merge_adjacent'] and len(results) > 0:
+        if verbose:
+            print("🔗 Merging adjacent chunks...")
+        original_count = len(results)
+        results = merge_adjacent_chunks(results)
+        if verbose:
+            print(f"  ✓ Merged {original_count} → {len(results)} chunks")
+
+    if verbose:
+        print("=" * 80)
+        print(f"🎉 Final result: {len(results)} chunks")
+        print("=" * 80)
+
+    return results
