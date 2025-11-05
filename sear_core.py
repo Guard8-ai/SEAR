@@ -1450,3 +1450,161 @@ def intersect_results(set_a, set_b):
             results.append(dict_b[key])
 
     return results
+
+def _parse_location(location_string):
+    """
+    Parse location string to extract filepath and line range.
+
+    Args:
+        location_string: String in format "path/to/file.txt:557-659"
+
+    Returns:
+        tuple: (filepath, start_line, end_line)
+               Returns (location_string, 0, 0) if parsing fails
+
+    Examples:
+        >>> _parse_location("src/main.py:10-20")
+        ('src/main.py', 10, 20)
+        >>> _parse_location("data/file.txt:1-100")
+        ('data/file.txt', 1, 100)
+    """
+    try:
+        # Split on last colon to handle paths with colons
+        if ':' not in location_string:
+            return (location_string, 0, 0)
+
+        # Find the last colon (separates path from line range)
+        last_colon_idx = location_string.rfind(':')
+        filepath = location_string[:last_colon_idx]
+        line_range = location_string[last_colon_idx + 1:]
+
+        # Parse line range "557-659"
+        if '-' not in line_range:
+            return (location_string, 0, 0)
+
+        start_str, end_str = line_range.split('-', 1)
+        start_line = int(start_str)
+        end_line = int(end_str)
+
+        return (filepath, start_line, end_line)
+
+    except (ValueError, AttributeError):
+        # If parsing fails, return original string with 0,0 range
+        return (location_string, 0, 0)
+
+def sort_by_document_order(chunks):
+    """
+    Sort chunks by document order: (corpus, filepath, start_line).
+
+    This ensures chunks appear in natural reading flow within their documents.
+
+    Args:
+        chunks: List of chunk dicts with 'corpus' and 'location' keys
+
+    Returns:
+        list: Chunks sorted by (corpus, filepath, start_line)
+
+    Examples:
+        >>> chunks = [
+        ...     {'corpus': 'docs', 'location': 'file.txt:100-200', 'score': 0.9},
+        ...     {'corpus': 'docs', 'location': 'file.txt:10-50', 'score': 0.8},
+        ...     {'corpus': 'code', 'location': 'main.py:1-10', 'score': 0.7}
+        ... ]
+        >>> sorted_chunks = sort_by_document_order(chunks)
+        >>> sorted_chunks[0]['location']
+        'main.py:1-10'
+    """
+    if not chunks:
+        return []
+
+    def sort_key(chunk):
+        """Extract sort key from chunk."""
+        corpus = chunk.get('corpus', '')
+        location = chunk.get('location', '')
+        filepath, start_line, _ = _parse_location(location)
+        return (corpus, filepath, start_line)
+
+    return sorted(chunks, key=sort_key)
+
+def merge_adjacent_chunks(chunks):
+    """
+    Merge consecutive chunks from the same file with touching or overlapping line ranges.
+
+    Chunks must be sorted by document order first (use sort_by_document_order).
+
+    Args:
+        chunks: List of chunk dicts sorted by document order
+
+    Returns:
+        list: Chunks with adjacent ones merged
+
+    Merging rules:
+        - Same corpus and filepath
+        - Line ranges touch (end_a + 1 >= start_b) or overlap
+        - Keep highest score
+        - Concatenate text with newline separator
+        - Combine line ranges (min start, max end)
+
+    Examples:
+        >>> chunks = [
+        ...     {'corpus': 'docs', 'location': 'f.txt:1-10', 'score': 0.9, 'chunk': 'A'},
+        ...     {'corpus': 'docs', 'location': 'f.txt:11-20', 'score': 0.8, 'chunk': 'B'}
+        ... ]
+        >>> merged = merge_adjacent_chunks(chunks)
+        >>> len(merged)
+        1
+        >>> merged[0]['location']
+        'f.txt:1-20'
+    """
+    if not chunks:
+        return []
+
+    merged = []
+    current = None
+
+    for chunk in chunks:
+        if current is None:
+            # Start with first chunk
+            current = chunk.copy()
+            continue
+
+        # Parse current and new chunk locations
+        curr_corpus = current.get('corpus', '')
+        curr_location = current.get('location', '')
+        curr_filepath, curr_start, curr_end = _parse_location(curr_location)
+
+        new_corpus = chunk.get('corpus', '')
+        new_location = chunk.get('location', '')
+        new_filepath, new_start, new_end = _parse_location(new_location)
+
+        # Check if chunks can be merged
+        same_corpus = curr_corpus == new_corpus
+        same_file = curr_filepath == new_filepath
+        # Lines touch or overlap: end of current + 1 >= start of new
+        lines_adjacent = (curr_end + 1 >= new_start)
+
+        if same_corpus and same_file and lines_adjacent:
+            # Merge chunks
+            # Keep highest score
+            current['score'] = max(current['score'], chunk['score'])
+
+            # Concatenate text
+            current_text = current.get('chunk', '')
+            new_text = chunk.get('chunk', '')
+            current['chunk'] = current_text + '\n' + new_text
+
+            # Combine line ranges: min start, max end
+            merged_start = min(curr_start, new_start)
+            merged_end = max(curr_end, new_end)
+            current['location'] = f"{curr_filepath}:{merged_start}-{merged_end}"
+
+        else:
+            # Cannot merge - save current and start new
+            merged.append(current)
+            current = chunk.copy()
+
+    # Don't forget the last chunk
+    if current is not None:
+        merged.append(current)
+
+    return merged
