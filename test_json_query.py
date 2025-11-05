@@ -12,6 +12,7 @@ Tests the execute_query() function with various query formats:
 """
 
 import sys
+import pytest
 from sear_core import execute_query, _retrieve_chunks_only
 
 
@@ -90,10 +91,13 @@ def mock_retrieve_chunks_only(query, corpuses=None, min_score=0.3, max_results=N
     return results
 
 
-# Monkey-patch the real function with our mock (for testing only)
-import sear_core
-original_retrieve = sear_core._retrieve_chunks_only
-sear_core._retrieve_chunks_only = mock_retrieve_chunks_only
+# Pytest fixture to set up mocking for all tests
+@pytest.fixture(autouse=True)
+def mock_retrieve_function(monkeypatch):
+    """Set up mock data and patch the retrieve function for all tests."""
+    setup_mock_results()
+    import sear_core
+    monkeypatch.setattr(sear_core, '_retrieve_chunks_only', mock_retrieve_chunks_only)
 
 
 # =============================================================================
@@ -395,13 +399,20 @@ def test_verbose_output():
 # =============================================================================
 
 def main():
-    """Run all tests."""
+    """Run all tests (for standalone execution - pytest is preferred)."""
     print("=" * 80)
     print("SEAR Boolean Logic - Task 3: JSON Query Executor Tests")
+    print("=" * 80)
+    print("\nNote: For full test suite, use: pytest test_json_query.py -v")
     print("=" * 80)
 
     # Set up mock data
     setup_mock_results()
+
+    # Monkey-patch for standalone execution
+    import sear_core
+    original_retrieve = sear_core._retrieve_chunks_only
+    sear_core._retrieve_chunks_only = mock_retrieve_chunks_only
 
     try:
         # Run all tests

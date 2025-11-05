@@ -729,13 +729,11 @@ def test_large_corpus_extraction():
         # Cleanup
         delete_corpus(corpus_name)
 
-        return True
-
     except Exception as e:
         print(f"\n❌ ERROR: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        raise
 
     finally:
         shutil.rmtree(tmpdir)
