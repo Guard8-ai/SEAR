@@ -333,7 +333,7 @@ For programmatic use or complex queries, use the JSON format directly:
 ### Using JSON Queries Programmatically
 
 ```python
-from sear_core import execute_query
+from sear.core import execute_query
 
 # Define query
 query_spec = {
@@ -723,7 +723,7 @@ python sear.py sql "SELECT * FROM search(\"security\") EXCEPT SELECT * FROM sear
 Import and use SQL queries in your Python code:
 
 ```python
-from sear_core import execute_sql_query, parse_sql_query
+from sear.core import execute_sql_query, parse_sql_query
 
 # Execute SQL query directly
 sql = 'SELECT * FROM search("security") EXCEPT SELECT * FROM search("deprecated")'
@@ -736,7 +736,7 @@ for chunk in results:
 **Parse SQL to JSON** (for inspection or modification):
 
 ```python
-from sear_core import parse_sql_query
+from sear.core import parse_sql_query
 
 sql = 'SELECT * FROM search("physics") EXCEPT SELECT * FROM search("mechanics")'
 query_spec = parse_sql_query(sql, verbose=True)
@@ -753,7 +753,7 @@ query_spec['semantic'] = True
 query_spec['threshold'] = 0.75
 
 # Then execute
-from sear_core import execute_query
+from sear.core import execute_query
 results = execute_query(query_spec)
 ```
 

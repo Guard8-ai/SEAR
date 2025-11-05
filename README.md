@@ -267,7 +267,7 @@ sear search "תנאים משפטיים"  # Hebrew queries supported
 ## Customization
 
 ```python
-# Embedding model (in sear_core.py)
+# Embedding model (in src/sear/core.py)
 payload = {"model": "all-minilm", "prompt": text}  # Current: 45MB, fast
 # payload = {"model": "nomic-embed-text", "prompt": text}  # Better quality
 # payload = {"model": "mxbai-embed-large", "prompt": text}  # Highest quality
@@ -330,7 +330,7 @@ ollama pull phi3:mini       # 2.3GB, better quality/speed
 
 **Scale to 100k+ chunks (approximate search):**
 ```python
-# In sear_core.py for very large indices
+# In src/sear/core.py for very large indices
 index = faiss.IndexIVFFlat(faiss.IndexFlatIP(dim), dim, nlist=100)
 ```
 
@@ -345,9 +345,9 @@ done
 ## Implementation
 
 **File Structure:**
-- `sear.py` - CLI interface (~335 lines)
-- `sear_core.py` - Core library (~1,280 lines)
-- `~/.sear/<corpus>/` - Indices (index.faiss, chunks.pkl, metadata.json)
+- `src/sear/cli.py` - CLI interface (~335 lines)
+- `src/sear/core.py` - Core library (~1,280 lines)
+- `faiss_indices/<corpus>/` - Indices (index.faiss, chunks.pkl, metadata.json)
 
 **Line Tracking:**
 1. Chunking: Text → chunks with `(start_line, end_line)` metadata
@@ -368,7 +368,7 @@ done
 ## Library Usage
 
 ```python
-from sear_core import (
+from sear.core import (
     index_file, search, extract_relevant_content, list_corpuses,
     validate_corpus_compatibility, is_gpu_available
 )

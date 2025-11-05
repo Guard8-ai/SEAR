@@ -55,6 +55,15 @@ sear gpu-info
 
 **Index locations:** `faiss_indices/<corpus_name>/`
 
+**Project Structure:** SEAR uses a standard Python src-layout:
+- `src/sear/` - Main package directory
+  - `cli.py` - CLI interface
+  - `core.py` - Core library functions
+  - `__init__.py` - Public API exports
+- `src/doc_converter/` - Document conversion module
+- `tests/` - Test suite
+- `examples/` - Example code
+
 ### 3. Semantic Search with LLM
 Search and get LLM-synthesized answers with citations:
 ```bash
@@ -216,7 +225,7 @@ sear delete corpus_name
 ```
 Documents (PDF/DOCX/TXT)
     ↓
-[doc-converter] ← PDF/DOCX → Markdown (with OCR)
+[src/doc_converter] ← PDF/DOCX → Markdown (with OCR)
     ↓
 Text Files
     ↓

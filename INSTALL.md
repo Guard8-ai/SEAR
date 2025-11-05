@@ -155,7 +155,7 @@ sear --help
 ```bash
 # Verify Python packages
 python -c "import numpy, faiss; print('✓ Dependencies OK')"
-python -c "from sear_core import search, index_file; print('✓ SEAR core OK')"
+python -c "from sear.core import search, index_file; print('✓ SEAR core OK')"
 ```
 
 ### Check Ollama

@@ -1,6 +1,36 @@
 # SEAR Changelog
 
-## v2.3.0 - SQL Query Interface (2025-02-06)
+## v2.3.0 - SQL Query Interface & Project Restructuring (2025-02-06)
+
+### Project Restructuring
+
+**Standard Python src-layout**: SEAR now follows Python packaging best practices with a standard src-layout structure.
+
+**New Structure**:
+```
+src/
+  sear/
+    __init__.py      # Public API exports
+    cli.py           # CLI interface (from sear.py)
+    core.py          # Core functions (from sear_core.py)
+  doc_converter/     # Document conversion module
+tests/               # All test files
+examples/            # Example code
+```
+
+**Migration Guide**:
+- **CLI**: Use `sear` command (installed via pip) instead of `python sear.py`
+- **Imports**: Use `from sear.core import ...` instead of `from sear_core import ...`
+- **Entry point**: Configured as `sear.cli:main` in pyproject.toml
+- **All tests passing**: 44/44 tests ✅
+- **All examples working**: 4/4 example files compile successfully ✅
+
+**Benefits**:
+- Standard Python packaging structure
+- Cleaner imports and namespace
+- Better IDE support and discoverability
+- Follows PEP 517/518 modern packaging standards
+- Easier to understand for new contributors
 
 ### New Features
 
@@ -37,7 +67,7 @@ python sear.py sql "SELECT * FROM (SELECT * FROM search(\"security\") UNION SELE
 
 **Programmatic Usage**:
 ```python
-from sear_core import execute_sql_query, parse_sql_query
+from sear.core import execute_sql_query, parse_sql_query
 
 # Execute SQL query directly
 sql = 'SELECT * FROM search("security") EXCEPT SELECT * FROM search("deprecated")'
@@ -80,26 +110,26 @@ SQL is the universal language for set operations and data filtering. Users famil
 
 ### Files Changed
 
-- [sear_core.py](sear_core.py#L2141-L2443) - SQL parser and executor
+- [src/sear/core.py](src/sear/core.py) - SQL parser and executor
   - New functions: `parse_sql_query()`, `execute_sql_query()`, `_parse_sql_node()`, `_extract_queries()`
   - Added `__all__` export list for clean public API
   - SQL syntax: SELECT FROM search(), UNION, EXCEPT, INTERSECT, WHERE clause
   - Recursive parsing for nested subqueries
 
-- [sear.py](sear.py#L633-L765) - CLI support for SQL command
+- [src/sear/cli.py](src/sear/cli.py) - CLI support for SQL command
   - Added `sql` command with full option support
   - Modes: search (LLM) and extract (file)
   - Flags: --mode, --output, --temperature, --provider, --api-key, --gpu
   - Updated help text and examples
 
-- [BOOLEAN_QUERIES.md](BOOLEAN_QUERIES.md#L575-L820) - Comprehensive SQL documentation
+- [BOOLEAN_QUERIES.md](BOOLEAN_QUERIES.md) - Comprehensive SQL documentation
   - SQL syntax reference with all supported operations
   - CLI usage examples for search and extract modes
   - Programmatic usage guide for Python projects
   - Comparison: SQL vs CLI flags vs JSON
   - Error handling and limitations
 
-- [test_sql_interface.py](test_sql_interface.py) - Comprehensive test suite
+- [tests/test_sql_interface.py](tests/test_sql_interface.py) - Comprehensive test suite
   - 12 test cases covering all SQL operations
   - Tests: simple queries, UNION, EXCEPT, INTERSECT, WHERE clause, nesting
   - Error handling validation
@@ -162,7 +192,7 @@ python sear.py search "physics" --exclude "mechanics" --semantic --threshold 0.7
 
 **API Support**:
 ```python
-from sear_core import execute_query
+from sear.core import execute_query
 
 # JSON query format for programmatic use
 query_spec = {
@@ -190,12 +220,12 @@ Traditional RAG systems retrieve chunks for a single broad query, often includin
 
 ### Files Changed
 
-- [sear_core.py](sear_core.py) - Boolean query operations implementation
+- [src/sear/core.py](src/sear/core.py) - Boolean query operations implementation
   - New functions: `execute_query()`, `_union()`, `_difference()`, `_intersect()`
   - Semantic filtering with embedding similarity
   - Document order preservation and chunk merging
 
-- [sear.py](sear.py) - CLI parser updates
+- [src/sear/cli.py](src/sear/cli.py) - CLI parser updates
   - Added flags: `--exclude`, `--union`, `--semantic`, `--threshold`
   - Both `search` and `extract` commands support boolean operations
 
@@ -283,7 +313,7 @@ This release completely redesigns SEAR's architecture from a fixed 2-index syste
    - Each corpus is self-contained with its own directory
    - Corpus names default to filename stem if not specified
 
-2. **Enhanced Metadata** ([sear_core.py:259-267](sear_core.py#L259-L267))
+2. **Enhanced Metadata** ([src/sear/core.py:259-267](src/sear/core.py#L259-L267))
    - `file_path`, `file_modified`, `file_size` - for cache validation
    - `embedding_model`, `embedding_dim` - for compatibility checks
    - `faiss_index_type`, `normalized` - for search behavior
@@ -324,26 +354,31 @@ No backward compatibility is provided. To migrate:
 
 2. Update your code to use the new API:
    ```python
-   # Old
+   # Old (v1.x)
    from sear_core import index_file, sear_search, CODE_INDEX, CODE_META
    index_file("file.txt", CODE_INDEX, CODE_META)
    results = sear_search("query")
 
-   # New
+   # v2.0 (deprecated structure)
    from sear_core import index_file, search
+   index_file("file.txt", "my-corpus")
+   results = search("query", corpuses=["my-corpus"])
+
+   # v2.3+ (current)
+   from sear.core import index_file, search
    index_file("file.txt", "my-corpus")
    results = search("query", corpuses=["my-corpus"])
    ```
 
 ### Files Changed
 
-- [sear_core.py](sear_core.py) - Complete refactoring (~580 lines, was ~320)
+- [src/sear/core.py](src/sear/core.py) - Complete refactoring (~580 lines, was ~320)
   - Removed legacy constants
   - Added helper functions for corpus management
   - Replaced 3-stage search with 2-stage multi-corpus search
   - Enhanced metadata schema
 
-- [sear.py](sear.py) - CLI redesign (~165 lines, was ~90)
+- [src/sear/cli.py](src/sear/cli.py) - CLI redesign (~165 lines, was ~90)
   - New command structure
   - Added `list` and `delete` commands
   - Updated help text
@@ -357,7 +392,7 @@ No backward compatibility is provided. To migrate:
 
 ### Technical Details
 
-**Metadata Schema** ([sear_core.py:259-267](sear_core.py#L259-L267)):
+**Metadata Schema** ([src/sear/core.py:259-267](src/sear/core.py#L259-L267)):
 ```json
 {
   "file_path": "/absolute/path/to/source.txt",

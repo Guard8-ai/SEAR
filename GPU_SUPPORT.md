@@ -27,7 +27,7 @@ python sear.py gpu-info
 
 ### Library API
 ```python
-from sear_core import index_file, search, is_gpu_available, get_gpu_info
+from sear.core import index_file, search, is_gpu_available, get_gpu_info
 
 # Check GPU availability
 if is_gpu_available():
@@ -134,10 +134,10 @@ See [BENCHMARK_RESULTS.md](BENCHMARK_RESULTS.md) for detailed analysis and metho
 - No data format changes required
 
 ### Architecture Changes
-1. **GPU Detection**: `init_gpu()` in [sear_core.py](sear_core.py#L31-L60)
+1. **GPU Detection**: `init_gpu()` in [src/sear/core.py](src/sear/core.py#L31-L60)
 2. **Index Transfer**: `index_cpu_to_gpu()` helper function
-3. **Search Optimization**: GPU indices used during search in [sear_core.py](sear_core.py#L833-L841)
-4. **CLI Support**: `--gpu` and `--no-gpu` flags in [sear.py](sear.py)
+3. **Search Optimization**: GPU indices used during search in [src/sear/core.py](src/sear/core.py#L833-L841)
+4. **CLI Support**: `--gpu` and `--no-gpu` flags in [src/sear/cli.py](src/sear/cli.py)
 
 ## Troubleshooting
 

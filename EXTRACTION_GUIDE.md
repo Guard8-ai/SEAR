@@ -115,7 +115,7 @@ python sear.py extract "query" \
 ### Programmatic Usage
 
 ```python
-from sear_core import extract_relevant_content
+from sear.core import extract_relevant_content
 
 result = extract_relevant_content(
     query="authentication security validation",
