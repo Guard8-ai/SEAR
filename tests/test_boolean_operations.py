@@ -5,7 +5,7 @@ Tests union, difference, and intersect operations on chunk results.
 """
 
 import sys
-from sear_core import union_results, difference_results, intersect_results, _chunk_to_key
+from sear.core import union_results, difference_results, intersect_results, _chunk_to_key
 
 
 def create_mock_result(corpus, location, score, chunk_text):

@@ -6,7 +6,7 @@ Test script to measure SEAR performance with and without GPU acceleration.
 import time
 import sys
 from pathlib import Path
-from sear_core import index_file, search, delete_corpus, is_gpu_available
+from sear.core import index_file, search, delete_corpus, is_gpu_available
 
 def create_test_data():
     """Create a test text file with some content."""

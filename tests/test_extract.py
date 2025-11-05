@@ -12,7 +12,7 @@ import shutil
 from pathlib import Path
 
 # Import SEAR core functions
-from sear_core import (
+from sear.core import (
     index_file,
     extract_relevant_content,
     reconstruct_text_from_chunks,

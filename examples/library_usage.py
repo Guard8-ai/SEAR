@@ -5,7 +5,7 @@ Demonstrates programmatic use of SEAR core library with multi-corpus architectur
 """
 
 # Import SEAR core library
-from sear_core import (
+from sear.core import (
     index_file,
     search,
     extract_relevant_content,

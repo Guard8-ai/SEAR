@@ -4,7 +4,7 @@ SEAR Custom Pipeline Example
 Use core SEAR functions to build custom workflows with multi-corpus architecture
 """
 
-from sear_core import (
+from sear.core import (
     ollama_embed,
     ollama_generate,
     chunk_text,

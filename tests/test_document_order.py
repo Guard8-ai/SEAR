@@ -9,7 +9,7 @@ Tests the following functions:
 """
 
 import sys
-from sear_core import _parse_location, sort_by_document_order, merge_adjacent_chunks
+from sear.core import _parse_location, sort_by_document_order, merge_adjacent_chunks
 
 
 def test_parse_location():

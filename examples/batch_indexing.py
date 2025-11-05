@@ -5,7 +5,7 @@ Index multiple files programmatically as separate corpuses or using shell script
 """
 
 from pathlib import Path
-from sear_core import index_file, list_corpuses, search, is_gpu_available
+from sear.core import index_file, list_corpuses, search, is_gpu_available
 
 def batch_index_as_corpuses(files_dict, use_gpu=False):
     """

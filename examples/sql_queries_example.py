@@ -12,7 +12,7 @@ Prerequisites:
     2. Make sure you have content indexed before running examples
 """
 
-from sear_core import parse_sql_query, execute_sql_query, execute_query
+from sear.core import parse_sql_query, execute_sql_query, execute_query
 
 
 def example_1_simple_query():
@@ -134,7 +134,7 @@ def example_7_programmatic_usage():
     # Show code example
     code = """
 # Method 1: Execute SQL directly
-from sear_core import execute_sql_query
+from sear.core import execute_sql_query
 
 sql = 'SELECT * FROM search("security") EXCEPT SELECT * FROM search("deprecated")'
 results = execute_sql_query(sql, verbose=True)
@@ -146,7 +146,7 @@ for chunk in results:
     print()
 
 # Method 2: Parse SQL, modify, then execute
-from sear_core import parse_sql_query, execute_query
+from sear.core import parse_sql_query, execute_query
 
 sql = 'SELECT * FROM search("physics") EXCEPT SELECT * FROM search("mechanics")'
 query_spec = parse_sql_query(sql)

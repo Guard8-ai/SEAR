@@ -93,11 +93,11 @@ Repository = "https://github.com/Guard8ai/sear"
 Issues = "https://github.com/Guard8ai/sear/issues"
 
 [project.scripts]
-sear = "sear:main"
+sear = "sear.cli:main"
 
 [tool.setuptools]
-py-modules = ["sear", "sear_core"]
-packages = ["doc_converter", "doc_converter.core", "doc_converter.converters", "doc_converter.cli"]
+package-dir = {"" = "src"}
+packages = ["sear", "doc_converter", "doc_converter.core", "doc_converter.converters", "doc_converter.cli"]
 
 # Black code formatter configuration
 [tool.black]
@@ -155,7 +155,7 @@ addopts = [
     "-ra",
     "--strict-markers",
     "--strict-config",
-    "--cov=sear_core",
+    "--cov=sear",
     "--cov-report=term-missing",
 ]
 

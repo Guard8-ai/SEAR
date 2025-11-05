@@ -9,7 +9,7 @@ Run this after activating the venv:
 """
 
 import sys
-from sear_core import parse_sql_query, execute_sql_query
+from sear.core import parse_sql_query, execute_sql_query
 
 
 def test_simple_query():

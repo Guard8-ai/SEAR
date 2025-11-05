@@ -3,13 +3,13 @@
 SEAR CLI: Summarization-Enhanced Augmented Retrieval
 Command-line interface for SEAR library
 
-For programmatic use, import sear_core instead:
-    from sear_core import index_file, search, list_corpuses
+For programmatic use, import sear instead:
+    from sear import index_file, search, list_corpuses
 """
 
 import sys
 import os
-from sear_core import (
+from .core import (
     index_file,
     search,
     extract_relevant_content,
@@ -28,7 +28,7 @@ from sear_core import (
 
 # Optional document converter support
 try:
-    from doc_converter import convert_document, DOCX_AVAILABLE
+    from ..doc_converter import convert_document, DOCX_AVAILABLE
     CONVERTER_AVAILABLE = True
 except ImportError:
     CONVERTER_AVAILABLE = False
@@ -660,19 +660,19 @@ Library Usage:
     elif cmd == "sql":
         if len(sys.argv) < 3:
             print("❌ Error: Missing SQL query")
-            print('Usage: python sear.py sql "SELECT * FROM search(\\"query\\") ..."')
+            print(r'Usage: python sear.py sql "SELECT * FROM search(\"query\") ..."')
             print('\nExamples:')
             print('  # Simple query')
-            print('  python sear.py sql "SELECT * FROM search(\\"physics\\")"')
+            print(r'  python sear.py sql "SELECT * FROM search(\"physics\")"')
             print('')
             print('  # Union (OR)')
-            print('  python sear.py sql "SELECT * FROM search(\\"security\\") UNION SELECT * FROM search(\\"auth\\")"')
+            print(r'  python sear.py sql "SELECT * FROM search(\"security\") UNION SELECT * FROM search(\"auth\")"')
             print('')
             print('  # Difference (EXCEPT)')
-            print('  python sear.py sql "SELECT * FROM search(\\"physics\\") EXCEPT SELECT * FROM search(\\"mechanics\\")"')
+            print(r'  python sear.py sql "SELECT * FROM search(\"physics\") EXCEPT SELECT * FROM search(\"mechanics\")"')
             print('')
             print('  # With options (WHERE clause)')
-            print('  python sear.py sql "SELECT * FROM search(\\"security\\") WHERE corpus IN (\\'backend\\', \\'api\\') AND min_score >= 0.35"')
+            print(r'  python sear.py sql "SELECT * FROM search(\"security\") WHERE corpus IN (\'backend\', \'api\') AND min_score >= 0.35"')
             sys.exit(1)
 
         # Parse remaining arguments

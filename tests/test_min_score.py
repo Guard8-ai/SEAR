@@ -5,7 +5,7 @@ Test the min_score filtering implementation
 
 import sys
 sys.path.insert(0, '/data/git/Guard8.ai/Summarization-EnhanceAugmentedRetrieval')
-from sear_core import search
+from sear.core import search
 
 print("="*80)
 print("TEST 1: High-quality query (should pass with default min_score=0.30)")

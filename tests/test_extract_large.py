@@ -10,7 +10,7 @@ import sys
 import tempfile
 import shutil
 from pathlib import Path
-from sear_core import index_file, extract_relevant_content, delete_corpus
+from sear.core import index_file, extract_relevant_content, delete_corpus
 
 
 def create_large_gitingest_corpus(tmpdir):

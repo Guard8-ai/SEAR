@@ -13,7 +13,7 @@ Tests the execute_query() function with various query formats:
 
 import sys
 import pytest
-from sear_core import execute_query, _retrieve_chunks_only
+from sear.core import execute_query, _retrieve_chunks_only
 
 
 def create_mock_result(corpus, location, score, chunk_text):
@@ -96,7 +96,7 @@ def mock_retrieve_chunks_only(query, corpuses=None, min_score=0.3, max_results=N
 def mock_retrieve_function(monkeypatch):
     """Set up mock data and patch the retrieve function for all tests."""
     setup_mock_results()
-    import sear_core
+    import sear.core as sear_core
     monkeypatch.setattr(sear_core, '_retrieve_chunks_only', mock_retrieve_chunks_only)
 
 
@@ -410,7 +410,7 @@ def main():
     setup_mock_results()
 
     # Monkey-patch for standalone execution
-    import sear_core
+    import sear.core as sear_core
     original_retrieve = sear_core._retrieve_chunks_only
     sear_core._retrieve_chunks_only = mock_retrieve_chunks_only
 

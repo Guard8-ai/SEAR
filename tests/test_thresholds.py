@@ -6,7 +6,7 @@ Tests various queries to understand similarity score distribution
 
 import sys
 sys.path.insert(0, '/data/git/Guard8.ai/Summarization-EnhanceAugmentedRetrieval')
-from sear_core import search
+from sear.core import search
 
 # Test queries designed to produce different quality matches
 test_queries = [
