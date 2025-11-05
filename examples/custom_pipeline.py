@@ -9,7 +9,7 @@ from sear_core import (
     ollama_generate,
     chunk_text,
     validate_input_file,
-    get_corpus_path,
+    get_corpus_dir,
     is_gpu_available
 )
 import faiss
@@ -76,7 +76,7 @@ def custom_search_pipeline(query, corpus_name="backend", top_k=5, use_gpu=False)
     print("-"*80)
 
     # Get corpus paths
-    corpus_dir = get_corpus_path(corpus_name)
+    corpus_dir = get_corpus_dir(corpus_name)
     index_file = corpus_dir / "index.faiss"
     metadata_file = corpus_dir / "chunks.pkl"
 
