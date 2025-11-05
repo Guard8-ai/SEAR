@@ -1,5 +1,224 @@
 # SEAR Changelog
 
+## v2.3.0 - SQL Query Interface (2025-02-06)
+
+### New Features
+
+**SQL Query Interface**
+
+SEAR now supports SQL-like queries for boolean operations, providing a familiar and expressive syntax for complex retrieval filtering. This is a new frontend layer built on top of the existing JSON query engine.
+
+- **SQL Syntax**: Use standard SQL set operations (UNION, EXCEPT, INTERSECT)
+- **WHERE Clause**: Filter by corpus, min_score, semantic options
+- **Nested Queries**: Support for complex nested subqueries with parentheses
+- **CLI Command**: New `sql` command for executing SQL queries
+- **Programmatic API**: Import `parse_sql_query()` and `execute_sql_query()` functions
+
+**CLI Syntax**:
+```bash
+# Simple query
+python sear.py sql "SELECT * FROM search(\"authentication\")"
+
+# Union (OR)
+python sear.py sql "SELECT * FROM search(\"security\") UNION SELECT * FROM search(\"auth\")"
+
+# Difference (EXCEPT)
+python sear.py sql "SELECT * FROM search(\"physics\") EXCEPT SELECT * FROM search(\"mechanics\")"
+
+# Intersect (AND)
+python sear.py sql "SELECT * FROM search(\"API\") INTERSECT SELECT * FROM search(\"security\")"
+
+# With WHERE clause
+python sear.py sql "SELECT * FROM search(\"security\") WHERE corpus IN ('backend', 'api') AND min_score >= 0.35"
+
+# Nested queries
+python sear.py sql "SELECT * FROM (SELECT * FROM search(\"security\") UNION SELECT * FROM search(\"auth\")) EXCEPT SELECT * FROM search(\"deprecated\")"
+```
+
+**Programmatic Usage**:
+```python
+from sear_core import execute_sql_query, parse_sql_query
+
+# Execute SQL query directly
+sql = 'SELECT * FROM search("security") EXCEPT SELECT * FROM search("deprecated")'
+results = execute_sql_query(sql, verbose=True)
+
+# Parse SQL to JSON for inspection/modification
+query_spec = parse_sql_query(sql)
+# Returns: {"operation": "difference", "left": {...}, "right": {...}}
+```
+
+**Supported Features**:
+- **Set Operations**: UNION, EXCEPT (difference), INTERSECT
+- **WHERE Clause Options**:
+  - `corpus IN ('name1', 'name2')` - Filter by corpus
+  - `min_score >= 0.35` - Minimum similarity threshold
+  - `semantic = true` - Enable semantic filtering
+  - `threshold >= 0.7` - Semantic similarity threshold
+- **Nested Queries**: Arbitrary nesting with parentheses
+- **Both Modes**: Works with both search (LLM) and extract (file) modes
+
+**Architecture**:
+```
+SQL Query String
+      ↓
+parse_sql_query() ← Converts to JSON
+      ↓
+JSON Query Spec
+      ↓
+execute_query() ← Existing engine
+      ↓
+Filtered Chunks
+```
+
+The SQL interface is a frontend layer that converts familiar SQL syntax to the existing JSON query format, maintaining full compatibility with all boolean query features introduced in v2.2.0.
+
+**Why This Matters**:
+SQL is the universal language for set operations and data filtering. Users familiar with SQL can now express complex boolean queries without learning new syntax. The SQL interface makes SEAR more accessible while maintaining all the power and flexibility of the underlying JSON engine.
+
+**Documentation**: See [BOOLEAN_QUERIES.md - SQL Query Interface](BOOLEAN_QUERIES.md#sql-query-interface) for complete guide with syntax reference, examples, and programmatic usage.
+
+### Files Changed
+
+- [sear_core.py](sear_core.py#L2141-L2443) - SQL parser and executor
+  - New functions: `parse_sql_query()`, `execute_sql_query()`, `_parse_sql_node()`, `_extract_queries()`
+  - Added `__all__` export list for clean public API
+  - SQL syntax: SELECT FROM search(), UNION, EXCEPT, INTERSECT, WHERE clause
+  - Recursive parsing for nested subqueries
+
+- [sear.py](sear.py#L633-L765) - CLI support for SQL command
+  - Added `sql` command with full option support
+  - Modes: search (LLM) and extract (file)
+  - Flags: --mode, --output, --temperature, --provider, --api-key, --gpu
+  - Updated help text and examples
+
+- [BOOLEAN_QUERIES.md](BOOLEAN_QUERIES.md#L575-L820) - Comprehensive SQL documentation
+  - SQL syntax reference with all supported operations
+  - CLI usage examples for search and extract modes
+  - Programmatic usage guide for Python projects
+  - Comparison: SQL vs CLI flags vs JSON
+  - Error handling and limitations
+
+- [test_sql_interface.py](test_sql_interface.py) - Comprehensive test suite
+  - 12 test cases covering all SQL operations
+  - Tests: simple queries, UNION, EXCEPT, INTERSECT, WHERE clause, nesting
+  - Error handling validation
+  - All tests passing ✅
+
+### Dependencies
+
+- Added `sqlparse` library for SQL parsing (installed automatically with pip)
+
+### Tested Features
+
+All SQL features have been tested and verified:
+- ✅ Simple SELECT FROM search() queries
+- ✅ UNION operation (multiple queries combined)
+- ✅ EXCEPT operation (difference/exclusion)
+- ✅ INTERSECT operation (common elements)
+- ✅ WHERE clause: corpus IN (...)
+- ✅ WHERE clause: min_score >= ...
+- ✅ WHERE clause: semantic = true/false
+- ✅ WHERE clause: threshold >= ...
+- ✅ Nested subqueries with parentheses
+- ✅ Multiple UNIONs chained together
+- ✅ Case-insensitive SQL keywords
+- ✅ Single and double quotes for strings
+- ✅ Error handling for invalid SQL
+
+---
+
+## v2.2.0 - Boolean Query Operations (2025-02-05)
+
+### New Features
+
+**Boolean Query Operations**
+
+SEAR now supports SQL-like boolean operations for advanced retrieval filtering, enabling precise control over search results through union, difference, and semantic filtering operations.
+
+- **Union (OR)**: Combine results from multiple targeted queries - `--union` flag
+- **Difference (Exclusion)**: Exclude unwanted topics from results - `--exclude` flag
+- **Semantic Filtering**: Content-based exclusion using embedding similarity - `--semantic` flag with `--threshold`
+- **Complex Queries**: Combine operations for precise filtering - `(A OR B) - C`
+
+**CLI Syntax**:
+```bash
+# Basic exclusion
+python sear.py search "physics lessons" --exclude "mechanics"
+
+# Union of topics
+python sear.py search "thermodynamics, quantum, EM" --union
+
+# Complex: (security OR auth) - (deprecated OR legacy)
+python sear.py search "security, authentication" --union --exclude "deprecated, legacy"
+
+# Semantic filtering for overlapping topics
+python sear.py search "physics" --exclude "mechanics" --semantic --threshold 0.7
+```
+
+**Works for both commands**:
+- `search` - Send filtered results to LLM for answer generation
+- `extract` - Save filtered content to file without LLM processing
+
+**API Support**:
+```python
+from sear_core import execute_query
+
+# JSON query format for programmatic use
+query_spec = {
+    "operation": "difference",
+    "left": {"operation": "union", "queries": ["security", "authentication"]},
+    "right": {"query": "deprecated"},
+    "semantic": True,
+    "threshold": 0.7,
+    "corpuses": ["backend"],
+    "min_score": 0.3
+}
+results = execute_query(query_spec, verbose=True)
+```
+
+**Performance**:
+- **Union**: O(n) set-based operations using Python dicts
+- **Difference (exact)**: O(n) location-based matching
+- **Difference (semantic)**: O(n×m) embedding similarity comparison
+- **Document order preservation**: Maintains reading flow, merges adjacent chunks
+
+**Why This Matters**:
+Traditional RAG systems retrieve chunks for a single broad query, often including unwanted content. Boolean operations enable precise filtering - get "physics WITHOUT mechanics", combine multiple targeted topics, or exclude deprecated content. This improves answer quality by ensuring only relevant content reaches the LLM.
+
+**Documentation**: See [BOOLEAN_QUERIES.md](BOOLEAN_QUERIES.md) for complete guide with examples, JSON format, and best practices.
+
+### Files Changed
+
+- [sear_core.py](sear_core.py) - Boolean query operations implementation
+  - New functions: `execute_query()`, `_union()`, `_difference()`, `_intersect()`
+  - Semantic filtering with embedding similarity
+  - Document order preservation and chunk merging
+
+- [sear.py](sear.py) - CLI parser updates
+  - Added flags: `--exclude`, `--union`, `--semantic`, `--threshold`
+  - Both `search` and `extract` commands support boolean operations
+
+- [BOOLEAN_QUERIES.md](BOOLEAN_QUERIES.md) - Comprehensive documentation
+  - Operation types and use cases
+  - CLI syntax and examples
+  - JSON query format for programmatic use
+  - Performance characteristics and best practices
+
+### Tested Features
+
+All features have been tested and verified:
+- ✅ Union operation with multiple queries
+- ✅ Difference (exact location matching)
+- ✅ Difference (semantic content filtering)
+- ✅ Complex nested queries (union + difference)
+- ✅ Document order preservation
+- ✅ Adjacent chunk merging
+- ✅ CLI integration for search and extract
+- ✅ JSON query format
+
+---
+
 ## v2.1.0 - Quality-Aware Search (2025-01-22)
 
 ### New Features

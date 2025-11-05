@@ -20,6 +20,8 @@ from sear_core import (
     is_gpu_available,
     get_gpu_info,
     execute_query,
+    parse_sql_query,
+    execute_sql_query,
     ollama_generate,
     anthropic_generate
 )
@@ -206,6 +208,7 @@ Usage:
   python sear.py index <file.txt> [corpus-name] [--gpu|--no-gpu]
   python sear.py search "query" [--corpus name1,name2,...] [--exclude "query"] [--union] [--semantic] [--threshold 0.7] [--temperature 0.0-1.0] [--provider ollama|anthropic] [--api-key KEY] [--gpu|--no-gpu]
   python sear.py extract "query" [--output file.txt] [--corpus name1,name2,...] [--exclude "query"] [--union] [--semantic] [--threshold 0.7] [--min-score 0.3] [--max-chunks N] [--gpu|--no-gpu]
+  python sear.py sql "SELECT * FROM search(...)" [--mode search|extract] [--output file.txt] [--temperature 0.0-1.0] [--provider ollama|anthropic] [--api-key KEY] [--gpu|--no-gpu]
   python sear.py convert <file.pdf|file.docx> [--output-dir DIR] [--no-normalize] [--force-ocr] [--lang heb|eng|heb+eng]
   python sear.py list
   python sear.py delete <corpus-name>
@@ -239,6 +242,16 @@ Commands:
             Use --threshold to set semantic similarity threshold (default: 0.7, requires --semantic)
             Use --min-score to set similarity threshold (default: 0.3)
             Use --max-chunks to limit total chunks extracted
+            Use --gpu to force GPU acceleration
+            Use --no-gpu to disable GPU acceleration
+
+  sql       Execute SQL-like queries on corpuses
+            Supports UNION, EXCEPT, INTERSECT operations
+            Use --mode to choose 'search' (LLM answer) or 'extract' (save to file)
+            Use --output to specify output file for extract mode
+            Use --temperature flag to control LLM creativity (search mode only)
+            Use --provider to select LLM (ollama=default, anthropic=Claude 3.5 Sonnet 4.5)
+            Use --api-key to provide Anthropic API key (or set ANTHROPIC_API_KEY env var)
             Use --gpu to force GPU acceleration
             Use --no-gpu to disable GPU acceleration
 
@@ -302,6 +315,22 @@ Examples:
 
   # Boolean extract: union of topics
   python sear.py extract "thermo, quantum, EM" --union --output topics.txt
+
+  # SQL queries (search mode - send to LLM)
+  python sear.py sql "SELECT * FROM search(\"authentication\")"
+  python sear.py sql "SELECT * FROM search(\"security\") UNION SELECT * FROM search(\"auth\")"
+  python sear.py sql "SELECT * FROM search(\"physics\") EXCEPT SELECT * FROM search(\"mechanics\")"
+  python sear.py sql "SELECT * FROM search(\"API\") INTERSECT SELECT * FROM search(\"security\")"
+
+  # SQL queries with options
+  python sear.py sql "SELECT * FROM search(\"security\") WHERE corpus IN ('backend', 'api') AND min_score >= 0.35"
+  python sear.py sql "SELECT * FROM search(\"physics\") EXCEPT SELECT * FROM search(\"mechanics\") WHERE semantic = true AND threshold >= 0.75"
+
+  # SQL extract mode (save to file without LLM)
+  python sear.py sql "SELECT * FROM search(\"security\") EXCEPT SELECT * FROM search(\"deprecated\")" --mode extract --output security_clean.txt
+
+  # Complex nested SQL queries
+  python sear.py sql "SELECT * FROM (SELECT * FROM search(\"security\") UNION SELECT * FROM search(\"auth\")) EXCEPT SELECT * FROM search(\"deprecated\")"
 
   # Convert documents to markdown (then index them)
   python sear.py convert document.pdf
@@ -626,6 +655,140 @@ Library Usage:
                 )
         except (FileNotFoundError, ValueError) as e:
             print(f"❌ Error: {e}")
+            sys.exit(1)
+
+    elif cmd == "sql":
+        if len(sys.argv) < 3:
+            print("❌ Error: Missing SQL query")
+            print('Usage: python sear.py sql "SELECT * FROM search(\\"query\\") ..."')
+            print('\nExamples:')
+            print('  # Simple query')
+            print('  python sear.py sql "SELECT * FROM search(\\"physics\\")"')
+            print('')
+            print('  # Union (OR)')
+            print('  python sear.py sql "SELECT * FROM search(\\"security\\") UNION SELECT * FROM search(\\"auth\\")"')
+            print('')
+            print('  # Difference (EXCEPT)')
+            print('  python sear.py sql "SELECT * FROM search(\\"physics\\") EXCEPT SELECT * FROM search(\\"mechanics\\")"')
+            print('')
+            print('  # With options (WHERE clause)')
+            print('  python sear.py sql "SELECT * FROM search(\\"security\\") WHERE corpus IN (\\'backend\\', \\'api\\') AND min_score >= 0.35"')
+            sys.exit(1)
+
+        # Parse remaining arguments
+        sql_query = sys.argv[2]
+        use_gpu = None
+        mode = 'search'  # default mode
+        temperature = 0.0
+        provider = 'ollama'
+        api_key = None
+        output_file = None
+
+        # Parse additional flags
+        i = 3
+        while i < len(sys.argv):
+            if sys.argv[i] == '--gpu':
+                use_gpu = True
+                i += 1
+            elif sys.argv[i] == '--no-gpu':
+                use_gpu = False
+                i += 1
+            elif sys.argv[i] == '--mode':
+                if i + 1 >= len(sys.argv):
+                    print("❌ Error: --mode flag requires a value (search|extract)")
+                    sys.exit(1)
+                mode = sys.argv[i + 1]
+                if mode not in ['search', 'extract']:
+                    print("❌ Error: --mode must be 'search' or 'extract'")
+                    sys.exit(1)
+                i += 2
+            elif sys.argv[i] == '--temperature':
+                if i + 1 >= len(sys.argv):
+                    print("❌ Error: --temperature flag requires a value (0.0-1.0)")
+                    sys.exit(1)
+                try:
+                    temperature = float(sys.argv[i + 1])
+                    if not 0.0 <= temperature <= 1.0:
+                        print("❌ Error: Temperature must be between 0.0 and 1.0")
+                        sys.exit(1)
+                except ValueError:
+                    print("❌ Error: Temperature must be a number")
+                    sys.exit(1)
+                i += 2
+            elif sys.argv[i] == '--provider':
+                if i + 1 >= len(sys.argv):
+                    print("❌ Error: --provider flag requires a value (ollama|anthropic)")
+                    sys.exit(1)
+                provider = sys.argv[i + 1]
+                if provider not in ['ollama', 'anthropic']:
+                    print("❌ Error: --provider must be 'ollama' or 'anthropic'")
+                    sys.exit(1)
+                i += 2
+            elif sys.argv[i] == '--api-key':
+                if i + 1 >= len(sys.argv):
+                    print("❌ Error: --api-key flag requires a value")
+                    sys.exit(1)
+                api_key = sys.argv[i + 1]
+                i += 2
+            elif sys.argv[i] == '--output':
+                if i + 1 >= len(sys.argv):
+                    print("❌ Error: --output flag requires a file path")
+                    sys.exit(1)
+                output_file = sys.argv[i + 1]
+                i += 2
+            else:
+                print(f"❌ Error: Unknown flag: {sys.argv[i]}")
+                sys.exit(1)
+
+        try:
+            # Execute SQL query
+            print("🔍 Parsing SQL query...")
+            chunks = execute_sql_query(sql_query, use_gpu=use_gpu, verbose=True)
+
+            if not chunks:
+                print("\n❌ No results found matching your SQL query")
+                sys.exit(0)
+
+            print(f"\n✅ Found {len(chunks)} chunks matching SQL query")
+
+            # Mode: search (send to LLM) or extract (save to file)
+            if mode == 'search':
+                # Send to LLM for answer generation
+                # Extract original query from SQL for the prompt
+                # For now, we'll use a generic prompt mentioning SQL query
+                result = send_chunks_to_llm(
+                    chunks,
+                    query=f"Results from SQL query: {sql_query}",
+                    temperature=temperature,
+                    provider=provider,
+                    api_key=api_key,
+                    verbose=True
+                )
+            else:
+                # Extract mode: save to file
+                if not output_file:
+                    output_file = "extracted_sql_results.txt"
+
+                # Format and save content
+                with open(output_file, 'w', encoding='utf-8') as f:
+                    f.write(f"SQL Query: {sql_query}\n")
+                    f.write(f"Total chunks: {len(chunks)}\n")
+                    f.write("=" * 80 + "\n\n")
+
+                    for i, chunk in enumerate(chunks, 1):
+                        f.write(f"[{i}] {chunk['corpus']} - {chunk['location']} (score: {chunk['score']:.3f})\n")
+                        f.write(f"{chunk['chunk']}\n")
+                        f.write("\n" + "-" * 80 + "\n\n")
+
+                print(f"\n✅ Content extracted to: {output_file}")
+
+        except ValueError as e:
+            print(f"❌ SQL Error: {e}")
+            sys.exit(1)
+        except Exception as e:
+            print(f"❌ Error executing SQL query: {e}")
+            import traceback
+            traceback.print_exc()
             sys.exit(1)
 
     elif cmd == "list":

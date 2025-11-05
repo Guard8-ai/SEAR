@@ -70,6 +70,32 @@ python sear.py extract "large topic query" --gpu
 
 ## Advanced Options
 
+### Boolean Query Operations (New!)
+
+Extract supports boolean operations for precise filtering:
+
+```bash
+# Exclude unwanted topics
+python sear.py extract "security patterns" --exclude "deprecated"
+
+# Union: combine multiple targeted queries
+python sear.py extract "API, configuration, settings" --union
+
+# Complex: (A OR B) - C
+python sear.py extract "security, auth" --union --exclude "legacy, deprecated"
+
+# Semantic filtering for overlapping topics
+python sear.py extract "physics" --exclude "mechanics" --semantic --threshold 0.7
+```
+
+**Why use boolean operations with extract?**
+- **Precise filtering**: Get content about topic A WITHOUT topic B
+- **Complete coverage**: Union of targeted queries often works better than broad queries
+- **Clean output**: Exclude noise, deprecated content, or test data
+- **Deterministic**: Same query always produces same results
+
+See [BOOLEAN_QUERIES.md](BOOLEAN_QUERIES.md) for detailed documentation.
+
 ### All Command-Line Options
 
 ```bash
@@ -78,6 +104,10 @@ python sear.py extract "query" \
   --corpus name1,name2 \            # Specific corpuses (default: all)
   --min-score 0.3 \                 # Similarity threshold (default: 0.3)
   --max-chunks 100 \                # Limit total chunks (default: unlimited)
+  --exclude "unwanted" \            # Exclude matching topics
+  --union \                         # Combine comma-separated queries
+  --semantic \                      # Enable semantic exclusion
+  --threshold 0.7 \                 # Semantic similarity threshold (default: 0.7)
   --gpu                             # Force GPU acceleration
   --no-gpu                          # Force CPU mode
 ```

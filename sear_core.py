@@ -9,6 +9,27 @@ Use this for integrating SEAR into your own applications.
 File Types:
 - INPUT: Pre-extracted text files (.txt) from gitingest or other sources
 - OUTPUT: FAISS indices and metadata stored in ~/.sear/
+
+Example Usage:
+    # Basic search
+    from sear_core import index_file, search
+    index_file("code.txt", "my-corpus")
+    results = search("authentication", corpuses=["my-corpus"])
+
+    # Boolean queries with JSON format
+    from sear_core import execute_query
+    query = {
+        "operation": "difference",
+        "left": {"query": "security"},
+        "right": {"query": "deprecated"}
+    }
+    results = execute_query(query)
+
+    # SQL interface
+    from sear_core import execute_sql_query
+    results = execute_sql_query(
+        'SELECT * FROM search("security") EXCEPT SELECT * FROM search("deprecated")'
+    )
 """
 
 import pickle
@@ -16,6 +37,43 @@ import numpy as np
 from pathlib import Path
 import json
 import faiss
+
+# Public API - functions available for import
+__all__ = [
+    # Core indexing and search
+    'index_file',
+    'search',
+    'extract_relevant_content',
+
+    # Corpus management
+    'list_corpuses',
+    'get_corpus_info',
+    'delete_corpus',
+    'validate_input_file',
+
+    # Boolean query operations (JSON format)
+    'execute_query',
+    'union_results',
+    'difference_results',
+    'intersect_results',
+
+    # SQL query interface (NEW in v2.3.0)
+    'parse_sql_query',
+    'execute_sql_query',
+
+    # LLM generation
+    'ollama_generate',
+    'anthropic_generate',
+
+    # GPU support
+    'is_gpu_available',
+    'get_gpu_info',
+    'init_gpu',
+
+    # Document ordering utilities
+    'sort_by_document_order',
+    'merge_adjacent_chunks',
+]
 
 ###############################################################################
 # CONFIGURATION
@@ -2136,3 +2194,335 @@ def execute_query(query_spec, use_gpu=None, verbose=False):
         print("=" * 80)
 
     return results
+
+
+###############################################################################
+# SQL INTERFACE
+###############################################################################
+
+def parse_sql_query(sql_str, verbose=False):
+    """
+    Parse SQL query and convert to JSON query specification.
+
+    Supported SQL syntax:
+        Simple query:
+            SELECT * FROM search("physics lessons")
+
+        Union (OR):
+            SELECT * FROM search("thermodynamics")
+            UNION
+            SELECT * FROM search("quantum mechanics")
+
+        Difference (EXCEPT):
+            SELECT * FROM search("physics")
+            EXCEPT
+            SELECT * FROM search("mechanics")
+
+        Intersect (AND):
+            SELECT * FROM search("security")
+            INTERSECT
+            SELECT * FROM search("authentication")
+
+        Nested operations:
+            SELECT * FROM (
+                SELECT * FROM search("security")
+                UNION
+                SELECT * FROM search("authentication")
+            )
+            EXCEPT
+            SELECT * FROM search("deprecated")
+
+        With options (WHERE clause):
+            SELECT * FROM search("physics")
+            WHERE corpus IN ('lectures', 'textbooks')
+            AND min_score >= 0.35
+            AND semantic = true
+            AND threshold >= 0.7
+
+    Args:
+        sql_str: SQL query string
+        verbose: Print parsing details
+
+    Returns:
+        dict: JSON query specification for execute_query()
+
+    Raises:
+        ValueError: If SQL syntax is invalid
+
+    Example:
+        >>> sql = 'SELECT * FROM search("physics") EXCEPT SELECT * FROM search("mechanics")'
+        >>> query_spec = parse_sql_query(sql)
+        >>> results = execute_query(query_spec)
+    """
+    import sqlparse
+    import re
+
+    if verbose:
+        print(f"🔍 Parsing SQL query...")
+        print(f"   Input: {sql_str}")
+
+    # Clean up the SQL string
+    sql_str = sql_str.strip()
+    if not sql_str:
+        raise ValueError("Empty SQL query")
+
+    # Parse the SQL
+    try:
+        parsed = sqlparse.parse(sql_str)
+        if not parsed:
+            raise ValueError("Failed to parse SQL query")
+        statement = parsed[0]
+    except Exception as e:
+        raise ValueError(f"SQL parsing error: {e}")
+
+    # Extract options from WHERE clause if present
+    options = {}
+    where_clause = None
+
+    # Convert SQL statement to string and look for WHERE clause
+    sql_upper = sql_str.upper()
+    if 'WHERE' in sql_upper:
+        # Split on WHERE to separate main query from options
+        parts = sql_str.split('WHERE', 1)
+        if len(parts) == 2:
+            sql_str = parts[0].strip()
+            where_clause = parts[1].strip()
+
+            if verbose:
+                print(f"   Found WHERE clause: {where_clause}")
+
+            # Parse WHERE clause for options
+            # corpus IN ('lectures', 'textbooks')
+            corpus_match = re.search(r"corpus\s+IN\s*\(([^)]+)\)", where_clause, re.IGNORECASE)
+            if corpus_match:
+                corpus_list = corpus_match.group(1)
+                # Extract quoted strings
+                corpuses = re.findall(r"['\"]([^'\"]+)['\"]", corpus_list)
+                if corpuses:
+                    options['corpuses'] = corpuses
+                    if verbose:
+                        print(f"   Extracted corpuses: {corpuses}")
+
+            # min_score >= 0.35
+            score_match = re.search(r"min_score\s*>=?\s*([\d.]+)", where_clause, re.IGNORECASE)
+            if score_match:
+                options['min_score'] = float(score_match.group(1))
+                if verbose:
+                    print(f"   Extracted min_score: {options['min_score']}")
+
+            # semantic = true
+            semantic_match = re.search(r"semantic\s*=\s*(true|false)", where_clause, re.IGNORECASE)
+            if semantic_match:
+                options['semantic'] = semantic_match.group(1).lower() == 'true'
+                if verbose:
+                    print(f"   Extracted semantic: {options['semantic']}")
+
+            # threshold >= 0.7
+            threshold_match = re.search(r"threshold\s*>=?\s*([\d.]+)", where_clause, re.IGNORECASE)
+            if threshold_match:
+                options['threshold'] = float(threshold_match.group(1))
+                if verbose:
+                    print(f"   Extracted threshold: {options['threshold']}")
+
+    # Now parse the main query structure
+    query_spec = _parse_sql_node(sql_str, verbose=verbose)
+
+    # Merge options into query spec
+    query_spec.update(options)
+
+    if verbose:
+        print(f"✓ Parsed successfully")
+        print(f"   JSON query spec: {json.dumps(query_spec, indent=2)}")
+
+    return query_spec
+
+
+def _parse_sql_node(sql_str, verbose=False):
+    """
+    Recursively parse a SQL node (SELECT statement or subquery).
+
+    Args:
+        sql_str: SQL string to parse
+        verbose: Print parsing details
+
+    Returns:
+        dict: Query specification node
+    """
+    import re
+
+    sql_str = sql_str.strip()
+
+    # Remove outer parentheses if present - but only if they match
+    # We need to check if the opening paren matches the closing paren
+    if sql_str.startswith('(') and sql_str.endswith(')'):
+        # Check if this is truly an outer pair (not just coincidental)
+        depth = 0
+        outer_pair = True
+        for i, char in enumerate(sql_str):
+            if char == '(':
+                depth += 1
+            elif char == ')':
+                depth -= 1
+                # If depth hits 0 before the last character, these aren't outer parens
+                if depth == 0 and i < len(sql_str) - 1:
+                    outer_pair = False
+                    break
+
+        if outer_pair:
+            sql_str = sql_str[1:-1].strip()
+
+    # Check for set operations (UNION, EXCEPT, INTERSECT)
+    # We need to split carefully, respecting parentheses
+
+    # Find top-level set operations (not inside parentheses)
+    operation_positions = []
+    paren_depth = 0
+    sql_upper = sql_str.upper()
+
+    # Track positions of UNION, EXCEPT, INTERSECT at top level
+    for i, char in enumerate(sql_str):
+        if char == '(':
+            paren_depth += 1
+        elif char == ')':
+            paren_depth -= 1
+        elif paren_depth == 0:
+            # Check for operations at this position
+            for op in ['UNION', 'EXCEPT', 'INTERSECT']:
+                if sql_upper[i:i+len(op)] == op:
+                    # Check it's a word boundary (not part of another word)
+                    if (i == 0 or not sql_upper[i-1].isalnum()) and \
+                       (i+len(op) >= len(sql_upper) or not sql_upper[i+len(op)].isalnum()):
+                        operation_positions.append((i, op))
+                        break
+
+    if operation_positions:
+        # We have a set operation at top level
+        # Take the first one
+        pos, operation = operation_positions[0]
+
+        left_sql = sql_str[:pos].strip()
+        right_sql = sql_str[pos+len(operation):].strip()
+
+        if verbose:
+            print(f"   Found {operation} operation")
+            print(f"     Left: {left_sql[:50]}...")
+            print(f"     Right: {right_sql[:50]}...")
+
+        # Recursively parse left and right
+        left_node = _parse_sql_node(left_sql, verbose=verbose)
+        right_node = _parse_sql_node(right_sql, verbose=verbose)
+
+        # Build operation node
+        if operation == 'UNION':
+            # Union combines multiple queries
+            # Collect all queries from left and right
+            left_queries = _extract_queries(left_node)
+            right_queries = _extract_queries(right_node)
+
+            return {
+                'operation': 'union',
+                'queries': left_queries + right_queries
+            }
+
+        elif operation == 'EXCEPT':
+            # Difference: left - right
+            return {
+                'operation': 'difference',
+                'left': left_node,
+                'right': right_node
+            }
+
+        elif operation == 'INTERSECT':
+            # Intersect: common elements
+            return {
+                'operation': 'intersect',
+                'left': left_node,
+                'right': right_node
+            }
+
+    else:
+        # No top-level operation - could be:
+        # 1. SELECT * FROM search("query")
+        # 2. SELECT * FROM (subquery)
+
+        # Check for SELECT * FROM (subquery) pattern first
+        subquery_match = re.search(r"SELECT\s+\*\s+FROM\s+\((.+)\)\s*$",
+                                   sql_str, re.IGNORECASE | re.DOTALL)
+
+        if subquery_match:
+            # This is a subquery - recursively parse it
+            subquery_sql = subquery_match.group(1).strip()
+            if verbose:
+                print(f"   Found subquery: {subquery_sql[:50]}...")
+            return _parse_sql_node(subquery_sql, verbose=verbose)
+
+        # Pattern: SELECT * FROM search("query string")
+        match = re.search(r"SELECT\s+\*\s+FROM\s+search\s*\(\s*['\"]([^'\"]+)['\"]\s*\)",
+                         sql_str, re.IGNORECASE)
+
+        if not match:
+            raise ValueError(f"Invalid SQL syntax. Expected: SELECT * FROM search(\"query\") or SELECT * FROM (subquery). Got: {sql_str[:100]}")
+
+        query_string = match.group(1)
+
+        if verbose:
+            print(f"   Simple query: '{query_string}'")
+
+        return {
+            'query': query_string
+        }
+
+
+def _extract_queries(node):
+    """
+    Extract all query strings from a query node.
+    Helper for flattening UNION operations.
+
+    Args:
+        node: Query specification node
+
+    Returns:
+        list: List of query strings
+    """
+    if 'query' in node:
+        # Simple query node
+        return [node['query']]
+    elif 'operation' in node and node['operation'] == 'union' and 'queries' in node:
+        # Already a union with queries list
+        return node['queries']
+    elif 'operation' in node and node['operation'] == 'union':
+        # Union with left/right nodes
+        left_queries = _extract_queries(node.get('left', {}))
+        right_queries = _extract_queries(node.get('right', {}))
+        return left_queries + right_queries
+    else:
+        # Complex operation - return as nested node
+        # This will preserve the structure
+        return []
+
+
+def execute_sql_query(sql_str, use_gpu=None, verbose=False):
+    """
+    Execute a SQL query directly (combines parse + execute).
+
+    Convenience wrapper that parses SQL and executes the resulting JSON query.
+
+    Args:
+        sql_str: SQL query string
+        use_gpu: Enable GPU acceleration
+        verbose: Print execution details
+
+    Returns:
+        list: Processed chunks with keys: corpus, location, score, chunk
+
+    Example:
+        >>> sql = 'SELECT * FROM search("physics") EXCEPT SELECT * FROM search("mechanics")'
+        >>> results = execute_sql_query(sql, verbose=True)
+        >>> for r in results:
+        ...     print(f"{r['corpus']} - {r['location']}: {r['chunk'][:100]}")
+    """
+    # Parse SQL to JSON
+    query_spec = parse_sql_query(sql_str, verbose=verbose)
+
+    # Execute JSON query
+    return execute_query(query_spec, use_gpu=use_gpu, verbose=verbose)

@@ -572,6 +572,255 @@ python sear.py search "query" --exclude "topic" --semantic --threshold 0.6
 
 ---
 
+## SQL Query Interface
+
+**NEW in v2.3.0**: Execute SQL-like queries for familiar, expressive syntax.
+
+### Why SQL?
+
+- **Familiar syntax**: If you know SQL, you already know how to use it
+- **Expressive**: Complex queries are easier to write and read
+- **Standards-based**: Uses standard SQL set operations (UNION, EXCEPT, INTERSECT)
+- **Interoperable**: Converts to JSON internally, fully compatible with existing system
+
+### Quick Examples
+
+```bash
+# Simple query
+python sear.py sql "SELECT * FROM search(\"authentication\")"
+
+# Union (OR)
+python sear.py sql "SELECT * FROM search(\"security\") UNION SELECT * FROM search(\"auth\")"
+
+# Difference (EXCEPT)
+python sear.py sql "SELECT * FROM search(\"physics\") EXCEPT SELECT * FROM search(\"mechanics\")"
+
+# Intersect (AND)
+python sear.py sql "SELECT * FROM search(\"API\") INTERSECT SELECT * FROM search(\"security\")"
+
+# Complex nested query
+python sear.py sql "SELECT * FROM (SELECT * FROM search(\"security\") UNION SELECT * FROM search(\"auth\")) EXCEPT SELECT * FROM search(\"deprecated\")"
+```
+
+### SQL Syntax Reference
+
+#### Basic Query
+```sql
+SELECT * FROM search("query string")
+```
+
+#### Set Operations
+
+**UNION** - Combine results from multiple queries:
+```sql
+SELECT * FROM search("query1")
+UNION
+SELECT * FROM search("query2")
+UNION
+SELECT * FROM search("query3")
+```
+
+**EXCEPT** - Exclude results (A - B):
+```sql
+SELECT * FROM search("main query")
+EXCEPT
+SELECT * FROM search("exclude query")
+```
+
+**INTERSECT** - Common results only (A ∩ B):
+```sql
+SELECT * FROM search("query1")
+INTERSECT
+SELECT * FROM search("query2")
+```
+
+#### WHERE Clause Options
+
+Add filtering options using WHERE clause:
+
+```sql
+-- Filter by corpus
+SELECT * FROM search("security")
+WHERE corpus IN ('backend', 'api', 'docs')
+
+-- Set minimum similarity score
+SELECT * FROM search("authentication")
+WHERE min_score >= 0.35
+
+-- Enable semantic filtering
+SELECT * FROM search("physics")
+EXCEPT SELECT * FROM search("mechanics")
+WHERE semantic = true AND threshold >= 0.75
+
+-- Combine multiple options
+SELECT * FROM search("security")
+WHERE corpus IN ('backend')
+AND min_score >= 0.4
+AND semantic = true
+AND threshold >= 0.7
+```
+
+#### Nested Queries
+
+Use parentheses for complex operations:
+
+```sql
+-- (A ∪ B) - C
+SELECT * FROM (
+    SELECT * FROM search("security")
+    UNION
+    SELECT * FROM search("authentication")
+)
+EXCEPT
+SELECT * FROM search("deprecated")
+
+-- (A - B) ∩ C
+SELECT * FROM (
+    SELECT * FROM search("API")
+    EXCEPT
+    SELECT * FROM search("internal")
+)
+INTERSECT
+SELECT * FROM search("public")
+```
+
+### CLI Usage
+
+#### Search Mode (Default)
+
+Send results to LLM for answer generation:
+
+```bash
+python sear.py sql "SELECT * FROM search(\"security\") EXCEPT SELECT * FROM search(\"deprecated\")"
+```
+
+**Options**:
+- `--temperature 0.0-1.0`: Control LLM creativity
+- `--provider ollama|anthropic`: Choose LLM provider
+- `--api-key KEY`: Anthropic API key
+- `--gpu` / `--no-gpu`: Force GPU on/off
+
+**Example**:
+```bash
+python sear.py sql "SELECT * FROM search(\"authentication\")" --provider anthropic --temperature 0.5
+```
+
+#### Extract Mode
+
+Save results to file without LLM processing:
+
+```bash
+python sear.py sql "SELECT * FROM search(\"security\") EXCEPT SELECT * FROM search(\"deprecated\")" --mode extract --output security_clean.txt
+```
+
+**Options**:
+- `--mode extract`: Enable extract mode
+- `--output file.txt`: Output file path
+- `--gpu` / `--no-gpu`: Force GPU on/off
+
+### Programmatic Usage (Python)
+
+Import and use SQL queries in your Python code:
+
+```python
+from sear_core import execute_sql_query, parse_sql_query
+
+# Execute SQL query directly
+sql = 'SELECT * FROM search("security") EXCEPT SELECT * FROM search("deprecated")'
+results = execute_sql_query(sql, verbose=True)
+
+for chunk in results:
+    print(f"{chunk['corpus']} - {chunk['location']}: {chunk['chunk'][:100]}")
+```
+
+**Parse SQL to JSON** (for inspection or modification):
+
+```python
+from sear_core import parse_sql_query
+
+sql = 'SELECT * FROM search("physics") EXCEPT SELECT * FROM search("mechanics")'
+query_spec = parse_sql_query(sql, verbose=True)
+
+# Returns JSON query spec:
+# {
+#     "operation": "difference",
+#     "left": {"query": "physics"},
+#     "right": {"query": "mechanics"}
+# }
+
+# Modify if needed
+query_spec['semantic'] = True
+query_spec['threshold'] = 0.75
+
+# Then execute
+from sear_core import execute_query
+results = execute_query(query_spec)
+```
+
+### SQL vs CLI Flags vs JSON
+
+Three ways to express the same query:
+
+**SQL**:
+```bash
+python sear.py sql "SELECT * FROM search(\"security\") UNION SELECT * FROM search(\"auth\") EXCEPT SELECT * FROM search(\"deprecated\") WHERE semantic = true AND threshold >= 0.75"
+```
+
+**CLI Flags**:
+```bash
+python sear.py search "security, auth" --union --exclude "deprecated" --semantic --threshold 0.75
+```
+
+**JSON** (programmatic):
+```python
+query = {
+    "operation": "difference",
+    "left": {
+        "operation": "union",
+        "queries": ["security", "auth"]
+    },
+    "right": {"query": "deprecated"},
+    "semantic": True,
+    "threshold": 0.75
+}
+execute_query(query)
+```
+
+**When to use each**:
+- **SQL**: Complex nested queries, familiar syntax, one-off commands
+- **CLI Flags**: Quick simple queries, shell scripts, most common use case
+- **JSON**: Programmatic use, dynamic query generation, precise control
+
+### SQL Limitations
+
+- **Read-only**: No INSERT, UPDATE, DELETE operations
+- **Single function**: Only `search()` function supported
+- **No wildcards**: Use full query strings, not `SELECT * WHERE ...`
+- **No JOINs**: Use INTERSECT for similar effect
+- **No aggregations**: No GROUP BY, COUNT, etc.
+
+These limitations keep the SQL interface focused and simple while covering 95% of use cases.
+
+### Error Handling
+
+The SQL parser provides clear error messages:
+
+```bash
+# Wrong function name
+$ python sear.py sql "SELECT * FROM invalid(\"test\")"
+❌ SQL Error: Invalid SQL syntax. Expected: SELECT * FROM search("query")
+
+# Missing query string
+$ python sear.py sql "SELECT * FROM search()"
+❌ SQL Error: Invalid SQL syntax. Expected: SELECT * FROM search("query")
+
+# Syntax error
+$ python sear.py sql "SELECT search(\"test\")"
+❌ SQL Error: Invalid SQL syntax. Expected: SELECT * FROM search("query")
+```
+
+---
+
 ## Related Documentation
 
 - [README.md](README.md) - Main SEAR documentation
