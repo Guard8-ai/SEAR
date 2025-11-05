@@ -7,7 +7,7 @@ Defines the interface for all document converters
 import os
 import time
 from abc import ABC, abstractmethod
-from typing import Tuple, Dict, Any, List, Optional
+from typing import Any
 
 
 class BaseConverter(ABC):
@@ -18,7 +18,7 @@ class BaseConverter(ABC):
     supported_extensions class attribute.
     """
 
-    supported_extensions: List[str] = []
+    supported_extensions: list[str] = []
 
     def __init__(self, apply_bidi: bool = True, normalize: bool = True):
         """
@@ -46,7 +46,7 @@ class BaseConverter(ABC):
         return ext in cls.supported_extensions
 
     @abstractmethod
-    def extract(self, file_path: str, **kwargs) -> Tuple[str, Dict[str, Any]]:
+    def extract(self, file_path: str, **kwargs) -> tuple[str, dict[str, Any]]:
         """
         Extract text and metadata from document
 
@@ -64,11 +64,8 @@ class BaseConverter(ABC):
         pass
 
     def convert(
-        self,
-        file_path: str,
-        output_dir: str = "converted_md",
-        **kwargs
-    ) -> Tuple[bool, float, Dict[str, Any]]:
+        self, file_path: str, output_dir: str = "converted_md", **kwargs
+    ) -> tuple[bool, float, dict[str, Any]]:
         """
         Convert document to markdown with metadata
 
@@ -80,10 +77,7 @@ class BaseConverter(ABC):
         Returns:
             Tuple of (success, elapsed_time, metadata)
         """
-        from ..core import (
-            save_markdown_file,
-            format_markdown_output
-        )
+        from ..core import format_markdown_output, save_markdown_file
 
         start_time = time.time()
         base_name = os.path.basename(file_path)
@@ -106,21 +100,17 @@ class BaseConverter(ABC):
 
             # Format markdown output
             markdown_content = format_markdown_output(
-                source_filename=base_name,
-                content=text,
-                metadata=metadata
+                source_filename=base_name, content=text, metadata=metadata
             )
 
             # Save to file
             output_path = save_markdown_file(
-                content=markdown_content,
-                output_dir=output_dir,
-                source_filename=file_path
+                content=markdown_content, output_dir=output_dir, source_filename=file_path
             )
 
             elapsed = time.time() - start_time
 
-            print(f"\nSuccess!")
+            print("\nSuccess!")
             print(f"  Output: {output_path}")
             print(f"  Method: {metadata.get('method', 'unknown')}")
             print(f"  Language: {metadata.get('language', 'unknown')}")
@@ -133,6 +123,7 @@ class BaseConverter(ABC):
         except Exception as e:
             print(f"\nError processing document: {e}")
             import traceback
+
             traceback.print_exc()
             return False, time.time() - start_time, {}
 

@@ -12,7 +12,7 @@ Prerequisites:
     2. Make sure you have content indexed before running examples
 """
 
-from sear.core import parse_sql_query, execute_sql_query, execute_query
+from sear.core import parse_sql_query
 
 
 def example_1_simple_query():
@@ -184,29 +184,35 @@ def example_8_cli_usage():
     print("=" * 80)
 
     examples = [
-        ("Simple query",
-         'python sear.py sql "SELECT * FROM search(\\"authentication\\")"'),
-
-        ("Union query",
-         'python sear.py sql "SELECT * FROM search(\\"security\\") UNION SELECT * FROM search(\\"auth\\")"'),
-
-        ("Difference query",
-         'python sear.py sql "SELECT * FROM search(\\"physics\\") EXCEPT SELECT * FROM search(\\"mechanics\\")"'),
-
-        ("With WHERE clause",
-         'python sear.py sql "SELECT * FROM search(\\"security\\") WHERE corpus IN (\'backend\', \'api\') AND min_score >= 0.35"'),
-
-        ("Nested query",
-         'python sear.py sql "SELECT * FROM (SELECT * FROM search(\\"security\\") UNION SELECT * FROM search(\\"auth\\")) EXCEPT SELECT * FROM search(\\"deprecated\\")"'),
-
-        ("Extract mode (save to file)",
-         'python sear.py sql "SELECT * FROM search(\\"security\\") EXCEPT SELECT * FROM search(\\"deprecated\\")" --mode extract --output security_clean.txt'),
-
-        ("With Anthropic Claude",
-         'python sear.py sql "SELECT * FROM search(\\"authentication\\")" --provider anthropic --temperature 0.5'),
-
-        ("With GPU acceleration",
-         'python sear.py sql "SELECT * FROM search(\\"security\\") UNION SELECT * FROM search(\\"auth\\")" --gpu'),
+        ("Simple query", 'python sear.py sql "SELECT * FROM search(\\"authentication\\")"'),
+        (
+            "Union query",
+            'python sear.py sql "SELECT * FROM search(\\"security\\") UNION SELECT * FROM search(\\"auth\\")"',
+        ),
+        (
+            "Difference query",
+            'python sear.py sql "SELECT * FROM search(\\"physics\\") EXCEPT SELECT * FROM search(\\"mechanics\\")"',
+        ),
+        (
+            "With WHERE clause",
+            "python sear.py sql \"SELECT * FROM search(\\\"security\\\") WHERE corpus IN ('backend', 'api') AND min_score >= 0.35\"",
+        ),
+        (
+            "Nested query",
+            'python sear.py sql "SELECT * FROM (SELECT * FROM search(\\"security\\") UNION SELECT * FROM search(\\"auth\\")) EXCEPT SELECT * FROM search(\\"deprecated\\")"',
+        ),
+        (
+            "Extract mode (save to file)",
+            'python sear.py sql "SELECT * FROM search(\\"security\\") EXCEPT SELECT * FROM search(\\"deprecated\\")" --mode extract --output security_clean.txt',
+        ),
+        (
+            "With Anthropic Claude",
+            'python sear.py sql "SELECT * FROM search(\\"authentication\\")" --provider anthropic --temperature 0.5',
+        ),
+        (
+            "With GPU acceleration",
+            'python sear.py sql "SELECT * FROM search(\\"security\\") UNION SELECT * FROM search(\\"auth\\")" --gpu',
+        ),
     ]
 
     for title, cmd in examples:
@@ -222,10 +228,14 @@ def example_9_comparison():
 
     print("\nQuery: Get security OR authentication content, excluding deprecated items")
     print("\n1. SQL Interface:")
-    print('   python sear.py sql "SELECT * FROM search(\\"security\\") UNION SELECT * FROM search(\\"auth\\") EXCEPT SELECT * FROM search(\\"deprecated\\") WHERE semantic = true AND threshold >= 0.75"')
+    print(
+        '   python sear.py sql "SELECT * FROM search(\\"security\\") UNION SELECT * FROM search(\\"auth\\") EXCEPT SELECT * FROM search(\\"deprecated\\") WHERE semantic = true AND threshold >= 0.75"'
+    )
 
     print("\n2. CLI Flags:")
-    print('   python sear.py search "security, auth" --union --exclude "deprecated" --semantic --threshold 0.75')
+    print(
+        '   python sear.py search "security, auth" --union --exclude "deprecated" --semantic --threshold 0.75'
+    )
 
     print("\n3. JSON (programmatic):")
     json_example = """{
@@ -278,5 +288,5 @@ def main():
     print()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

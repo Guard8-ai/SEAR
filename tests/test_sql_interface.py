@@ -9,7 +9,9 @@ Run this after activating the venv:
 """
 
 import sys
-from sear.core import parse_sql_query, execute_sql_query
+import traceback
+
+from sear.core import parse_sql_query
 
 
 def test_simple_query():
@@ -22,10 +24,10 @@ def test_simple_query():
     print(f"SQL: {sql}")
 
     result = parse_sql_query(sql, verbose=True)
-    print(f"\n✅ PASS: Simple query parsed successfully")
-    print(f"   Expected: {{'query': 'authentication'}}")
+    print("\n✅ PASS: Simple query parsed successfully")
+    print("   Expected: {'query': 'authentication'}")
     print(f"   Got: {result}")
-    assert result == {'query': 'authentication'}, "Unexpected result"
+    assert result == {"query": "authentication"}, "Unexpected result"
 
 
 def test_union_query():
@@ -38,8 +40,8 @@ def test_union_query():
     print(f"SQL: {sql}")
 
     result = parse_sql_query(sql, verbose=True)
-    print(f"\n✅ PASS: Union query parsed successfully")
-    expected = {'operation': 'union', 'queries': ['security', 'authentication']}
+    print("\n✅ PASS: Union query parsed successfully")
+    expected = {"operation": "union", "queries": ["security", "authentication"]}
     print(f"   Expected: {expected}")
     print(f"   Got: {result}")
     assert result == expected, "Unexpected result"
@@ -55,10 +57,10 @@ def test_except_query():
     print(f"SQL: {sql}")
 
     result = parse_sql_query(sql, verbose=True)
-    print(f"\n✅ PASS: EXCEPT query parsed successfully")
+    print("\n✅ PASS: EXCEPT query parsed successfully")
     print(f"   Got: {result}")
-    assert result['operation'] == 'difference', "Expected difference operation"
-    assert 'left' in result and 'right' in result, "Expected left/right nodes"
+    assert result["operation"] == "difference", "Expected difference operation"
+    assert "left" in result and "right" in result, "Expected left/right nodes"
 
 
 def test_intersect_query():
@@ -71,10 +73,10 @@ def test_intersect_query():
     print(f"SQL: {sql}")
 
     result = parse_sql_query(sql, verbose=True)
-    print(f"\n✅ PASS: INTERSECT query parsed successfully")
+    print("\n✅ PASS: INTERSECT query parsed successfully")
     print(f"   Got: {result}")
-    assert result['operation'] == 'intersect', "Expected intersect operation"
-    assert 'left' in result and 'right' in result, "Expected left/right nodes"
+    assert result["operation"] == "intersect", "Expected intersect operation"
+    assert "left" in result and "right" in result, "Expected left/right nodes"
 
 
 def test_where_clause_corpus():
@@ -87,10 +89,10 @@ def test_where_clause_corpus():
     print(f"SQL: {sql}")
 
     result = parse_sql_query(sql, verbose=True)
-    print(f"\n✅ PASS: WHERE clause (corpus) parsed successfully")
+    print("\n✅ PASS: WHERE clause (corpus) parsed successfully")
     print(f"   Got: {result}")
-    assert result['query'] == 'security', "Expected security query"
-    assert result['corpuses'] == ['backend', 'api'], "Expected corpus list"
+    assert result["query"] == "security", "Expected security query"
+    assert result["corpuses"] == ["backend", "api"], "Expected corpus list"
 
 
 def test_where_clause_min_score():
@@ -103,10 +105,10 @@ def test_where_clause_min_score():
     print(f"SQL: {sql}")
 
     result = parse_sql_query(sql, verbose=True)
-    print(f"\n✅ PASS: WHERE clause (min_score) parsed successfully")
+    print("\n✅ PASS: WHERE clause (min_score) parsed successfully")
     print(f"   Got: {result}")
-    assert result['query'] == 'authentication', "Expected authentication query"
-    assert result['min_score'] == 0.35, "Expected min_score 0.35"
+    assert result["query"] == "authentication", "Expected authentication query"
+    assert result["min_score"] == 0.35, "Expected min_score 0.35"
 
 
 def test_where_clause_semantic():
@@ -119,11 +121,11 @@ def test_where_clause_semantic():
     print(f"SQL: {sql}")
 
     result = parse_sql_query(sql, verbose=True)
-    print(f"\n✅ PASS: WHERE clause (semantic) parsed successfully")
+    print("\n✅ PASS: WHERE clause (semantic) parsed successfully")
     print(f"   Got: {result}")
-    assert result['operation'] == 'difference', "Expected difference operation"
-    assert result['semantic'] == True, "Expected semantic = true"
-    assert result['threshold'] == 0.75, "Expected threshold 0.75"
+    assert result["operation"] == "difference", "Expected difference operation"
+    assert result["semantic"], "Expected semantic = true"
+    assert result["threshold"] == 0.75, "Expected threshold 0.75"
 
 
 def test_nested_query():
@@ -144,10 +146,10 @@ def test_nested_query():
     print(f"SQL: {sql}")
 
     result = parse_sql_query(sql, verbose=True)
-    print(f"\n✅ PASS: Nested query parsed successfully")
+    print("\n✅ PASS: Nested query parsed successfully")
     print(f"   Got: {result}")
-    assert result['operation'] == 'difference', "Expected difference operation"
-    assert result['left']['operation'] == 'union', "Expected union in left node"
+    assert result["operation"] == "difference", "Expected difference operation"
+    assert result["left"]["operation"] == "union", "Expected union in left node"
 
 
 def test_multiple_union():
@@ -160,11 +162,11 @@ def test_multiple_union():
     print(f"SQL: {sql}")
 
     result = parse_sql_query(sql, verbose=True)
-    print(f"\n✅ PASS: Multiple UNION parsed successfully")
+    print("\n✅ PASS: Multiple UNION parsed successfully")
     print(f"   Got: {result}")
-    assert result['operation'] == 'union', "Expected union operation"
-    assert len(result['queries']) == 3, "Expected 3 queries"
-    assert result['queries'] == ['thermo', 'quantum', 'EM'], "Expected all three queries"
+    assert result["operation"] == "union", "Expected union operation"
+    assert len(result["queries"]) == 3, "Expected 3 queries"
+    assert result["queries"] == ["thermo", "quantum", "EM"], "Expected all three queries"
 
 
 def test_case_insensitive():
@@ -177,10 +179,10 @@ def test_case_insensitive():
     print(f"SQL: {sql}")
 
     result = parse_sql_query(sql, verbose=True)
-    print(f"\n✅ PASS: Case insensitive parsing successful")
+    print("\n✅ PASS: Case insensitive parsing successful")
     print(f"   Got: {result}")
-    assert result['operation'] == 'union', "Expected union operation"
-    assert result['queries'] == ['test', 'example'], "Expected both queries"
+    assert result["operation"] == "union", "Expected union operation"
+    assert result["queries"] == ["test", "example"], "Expected both queries"
 
 
 def test_single_quotes():
@@ -193,10 +195,10 @@ def test_single_quotes():
     print(f"SQL: {sql}")
 
     result = parse_sql_query(sql, verbose=True)
-    print(f"\n✅ PASS: Single quotes handled successfully")
+    print("\n✅ PASS: Single quotes handled successfully")
     print(f"   Got: {result}")
-    assert result['operation'] == 'union', "Expected union operation"
-    assert result['queries'] == ['authentication', 'security'], "Expected both queries"
+    assert result["operation"] == "union", "Expected union operation"
+    assert result["queries"] == ["authentication", "security"], "Expected both queries"
 
 
 def test_error_handling():
@@ -207,22 +209,22 @@ def test_error_handling():
 
     invalid_sqls = [
         'SELECT * FROM invalid("test")',  # Wrong function name
-        'SELECT * search("test")',        # Missing FROM
-        'SELECT * FROM search()',          # Missing query string
-        '',                                # Empty query
+        'SELECT * search("test")',  # Missing FROM
+        "SELECT * FROM search()",  # Missing query string
+        "",  # Empty query
     ]
 
     for sql in invalid_sqls:
         print(f"\nTesting invalid SQL: {sql}")
         try:
-            result = parse_sql_query(sql, verbose=False)
-            assert False, f"Should have raised error for: {sql}"
+            parse_sql_query(sql, verbose=False)
+            raise AssertionError(f"Should have raised error for: {sql}")
         except ValueError as e:
             print(f"✅ Correctly raised ValueError: {e}")
         except Exception as e:
             print(f"⚠️  Raised unexpected error: {e}")
 
-    print(f"\n✅ PASS: Error handling works correctly")
+    print("\n✅ PASS: Error handling works correctly")
 
 
 def main():
@@ -273,5 +275,5 @@ def main():
         return 1
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

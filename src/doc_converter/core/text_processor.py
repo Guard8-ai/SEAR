@@ -6,12 +6,14 @@ Handles text normalization, language detection, and BiDi processing
 
 import re
 import unicodedata
-from typing import Tuple, List, Optional
+from typing import Optional
+
 from bidi import algorithm as bidi_algorithm
 
 
-def normalize_text_for_llm(text: str, remove_niqqud: bool = True,
-                           normalize_whitespace: bool = True) -> str:
+def normalize_text_for_llm(
+    text: str, remove_niqqud: bool = True, normalize_whitespace: bool = True
+) -> str:
     """
     Normalize text to reduce token waste and cognitive load on LLMs
 
@@ -28,49 +30,48 @@ def normalize_text_for_llm(text: str, remove_niqqud: bool = True,
     # Remove Hebrew niqqud and diacritics (U+0591 to U+05C7)
     if remove_niqqud:
         # Hebrew vowel points, cantillation marks, and other diacritics
-        text = re.sub(r'[\u0591-\u05C7]', '', text)
+        text = re.sub(r"[\u0591-\u05C7]", "", text)
         # Additional Hebrew marks
-        text = re.sub(r'[\u05F3\u05F4]', '', text)  # Geresh and Gershayim marks
+        text = re.sub(r"[\u05F3\u05F4]", "", text)  # Geresh and Gershayim marks
 
     # Remove soft hyphens
-    text = text.replace('\u00AD', '')
+    text = text.replace("\u00ad", "")
 
     # Remove zero-width characters
-    text = re.sub(r'[\u200B-\u200D\uFEFF]', '', text)
+    text = re.sub(r"[\u200B-\u200D\uFEFF]", "", text)
 
     # Remove control characters except newlines and tabs
-    text = ''.join(char for char in text if unicodedata.category(char)[0] != 'C'
-                   or char in '\n\t')
+    text = "".join(char for char in text if unicodedata.category(char)[0] != "C" or char in "\n\t")
 
     if normalize_whitespace:
         # Normalize multiple spaces to single space
-        text = re.sub(r' {2,}', ' ', text)
+        text = re.sub(r" {2,}", " ", text)
 
         # Remove trailing whitespace from each line
-        text = '\n'.join(line.rstrip() for line in text.split('\n'))
+        text = "\n".join(line.rstrip() for line in text.split("\n"))
 
         # Reduce excessive blank lines (more than 2 consecutive) to 2
-        text = re.sub(r'\n{3,}', '\n\n', text)
+        text = re.sub(r"\n{3,}", "\n\n", text)
 
         # Remove spaces before punctuation
-        text = re.sub(r' +([.,;:!?])', r'\1', text)
+        text = re.sub(r" +([.,;:!?])", r"\1", text)
 
     # Remove bullet points and list markers that don't add semantic value
     # Keep the structure but simplify markers
-    text = re.sub(r'^[\s]*[•·∙●○◦▪▫■□▬▭▮▯◆◇◈◊][\s]+', '- ', text, flags=re.MULTILINE)
+    text = re.sub(r"^[\s]*[•·∙●○◦▪▫■□▬▭▮▯◆◇◈◊][\s]+", "- ", text, flags=re.MULTILINE)
 
     # Normalize Unicode to NFC form (canonical composition)
-    text = unicodedata.normalize('NFC', text)
+    text = unicodedata.normalize("NFC", text)
 
     return text.strip()
 
 
-def detect_language(text: str) -> Tuple[str, List[str]]:
+def detect_language(text: str) -> tuple[str, list[str]]:
     """
     Detect languages in text
     Returns: (primary_language, list_of_detected_languages)
     """
-    hebrew_chars = sum(1 for c in text if '\u0590' <= c <= '\u05FF')
+    hebrew_chars = sum(1 for c in text if "\u0590" <= c <= "\u05ff")
     english_chars = sum(1 for c in text if c.isascii() and c.isalpha())
     total_alpha = hebrew_chars + english_chars
 
@@ -95,7 +96,7 @@ def detect_language(text: str) -> Tuple[str, List[str]]:
     return primary, detected if detected else ["unknown"]
 
 
-def get_ocr_lang_code(detected_languages: List[str], lang_override: Optional[str] = None) -> str:
+def get_ocr_lang_code(detected_languages: list[str], lang_override: Optional[str] = None) -> str:
     """
     Convert detected languages to Tesseract language codes
     """

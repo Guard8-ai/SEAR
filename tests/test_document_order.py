@@ -9,7 +9,8 @@ Tests the following functions:
 """
 
 import sys
-from sear.core import _parse_location, sort_by_document_order, merge_adjacent_chunks
+
+from sear.core import _parse_location, merge_adjacent_chunks, sort_by_document_order
 
 
 def test_parse_location():
@@ -74,53 +75,53 @@ def test_sort_by_document_order():
 
     # Test 1: Sort by start line within same file
     chunks = [
-        {'corpus': 'docs', 'location': 'file.txt:100-200', 'score': 0.9, 'chunk': 'C'},
-        {'corpus': 'docs', 'location': 'file.txt:10-50', 'score': 0.8, 'chunk': 'A'},
-        {'corpus': 'docs', 'location': 'file.txt:51-99', 'score': 0.7, 'chunk': 'B'},
+        {"corpus": "docs", "location": "file.txt:100-200", "score": 0.9, "chunk": "C"},
+        {"corpus": "docs", "location": "file.txt:10-50", "score": 0.8, "chunk": "A"},
+        {"corpus": "docs", "location": "file.txt:51-99", "score": 0.7, "chunk": "B"},
     ]
     sorted_chunks = sort_by_document_order(chunks)
-    assert sorted_chunks[0]['location'] == 'file.txt:10-50'
-    assert sorted_chunks[1]['location'] == 'file.txt:51-99'
-    assert sorted_chunks[2]['location'] == 'file.txt:100-200'
+    assert sorted_chunks[0]["location"] == "file.txt:10-50"
+    assert sorted_chunks[1]["location"] == "file.txt:51-99"
+    assert sorted_chunks[2]["location"] == "file.txt:100-200"
     print("✓ Sort by line number within same file")
 
     # Test 2: Sort by filename within same corpus
     chunks = [
-        {'corpus': 'docs', 'location': 'z_last.txt:1-10', 'score': 0.9, 'chunk': 'Z'},
-        {'corpus': 'docs', 'location': 'a_first.txt:1-10', 'score': 0.8, 'chunk': 'A'},
-        {'corpus': 'docs', 'location': 'm_middle.txt:1-10', 'score': 0.7, 'chunk': 'M'},
+        {"corpus": "docs", "location": "z_last.txt:1-10", "score": 0.9, "chunk": "Z"},
+        {"corpus": "docs", "location": "a_first.txt:1-10", "score": 0.8, "chunk": "A"},
+        {"corpus": "docs", "location": "m_middle.txt:1-10", "score": 0.7, "chunk": "M"},
     ]
     sorted_chunks = sort_by_document_order(chunks)
-    assert sorted_chunks[0]['location'] == 'a_first.txt:1-10'
-    assert sorted_chunks[1]['location'] == 'm_middle.txt:1-10'
-    assert sorted_chunks[2]['location'] == 'z_last.txt:1-10'
+    assert sorted_chunks[0]["location"] == "a_first.txt:1-10"
+    assert sorted_chunks[1]["location"] == "m_middle.txt:1-10"
+    assert sorted_chunks[2]["location"] == "z_last.txt:1-10"
     print("✓ Sort by filename within same corpus")
 
     # Test 3: Sort by corpus
     chunks = [
-        {'corpus': 'zeta', 'location': 'file.txt:1-10', 'score': 0.9, 'chunk': 'Z'},
-        {'corpus': 'alpha', 'location': 'file.txt:1-10', 'score': 0.8, 'chunk': 'A'},
-        {'corpus': 'beta', 'location': 'file.txt:1-10', 'score': 0.7, 'chunk': 'B'},
+        {"corpus": "zeta", "location": "file.txt:1-10", "score": 0.9, "chunk": "Z"},
+        {"corpus": "alpha", "location": "file.txt:1-10", "score": 0.8, "chunk": "A"},
+        {"corpus": "beta", "location": "file.txt:1-10", "score": 0.7, "chunk": "B"},
     ]
     sorted_chunks = sort_by_document_order(chunks)
-    assert sorted_chunks[0]['corpus'] == 'alpha'
-    assert sorted_chunks[1]['corpus'] == 'beta'
-    assert sorted_chunks[2]['corpus'] == 'zeta'
+    assert sorted_chunks[0]["corpus"] == "alpha"
+    assert sorted_chunks[1]["corpus"] == "beta"
+    assert sorted_chunks[2]["corpus"] == "zeta"
     print("✓ Sort by corpus name")
 
     # Test 4: Multi-level sort (corpus → file → line)
     chunks = [
-        {'corpus': 'docs', 'location': 'b.txt:100-200', 'score': 0.9, 'chunk': 'D'},
-        {'corpus': 'code', 'location': 'main.py:1-10', 'score': 0.8, 'chunk': 'C'},
-        {'corpus': 'docs', 'location': 'a.txt:50-60', 'score': 0.7, 'chunk': 'A'},
-        {'corpus': 'docs', 'location': 'a.txt:10-20', 'score': 0.6, 'chunk': 'B'},
+        {"corpus": "docs", "location": "b.txt:100-200", "score": 0.9, "chunk": "D"},
+        {"corpus": "code", "location": "main.py:1-10", "score": 0.8, "chunk": "C"},
+        {"corpus": "docs", "location": "a.txt:50-60", "score": 0.7, "chunk": "A"},
+        {"corpus": "docs", "location": "a.txt:10-20", "score": 0.6, "chunk": "B"},
     ]
     sorted_chunks = sort_by_document_order(chunks)
     # Expected order: code/main.py:1-10, docs/a.txt:10-20, docs/a.txt:50-60, docs/b.txt:100-200
-    assert sorted_chunks[0]['corpus'] == 'code' and sorted_chunks[0]['location'] == 'main.py:1-10'
-    assert sorted_chunks[1]['corpus'] == 'docs' and sorted_chunks[1]['location'] == 'a.txt:10-20'
-    assert sorted_chunks[2]['corpus'] == 'docs' and sorted_chunks[2]['location'] == 'a.txt:50-60'
-    assert sorted_chunks[3]['corpus'] == 'docs' and sorted_chunks[3]['location'] == 'b.txt:100-200'
+    assert sorted_chunks[0]["corpus"] == "code" and sorted_chunks[0]["location"] == "main.py:1-10"
+    assert sorted_chunks[1]["corpus"] == "docs" and sorted_chunks[1]["location"] == "a.txt:10-20"
+    assert sorted_chunks[2]["corpus"] == "docs" and sorted_chunks[2]["location"] == "a.txt:50-60"
+    assert sorted_chunks[3]["corpus"] == "docs" and sorted_chunks[3]["location"] == "b.txt:100-200"
     print("✓ Multi-level sort (corpus → file → line)")
 
     # Test 5: Empty list
@@ -129,10 +130,10 @@ def test_sort_by_document_order():
     print("✓ Empty list edge case")
 
     # Test 6: Single item
-    chunks = [{'corpus': 'test', 'location': 'file.txt:1-10', 'score': 0.5, 'chunk': 'X'}]
+    chunks = [{"corpus": "test", "location": "file.txt:1-10", "score": 0.5, "chunk": "X"}]
     sorted_chunks = sort_by_document_order(chunks)
     assert len(sorted_chunks) == 1
-    assert sorted_chunks[0]['chunk'] == 'X'
+    assert sorted_chunks[0]["chunk"] == "X"
     print("✓ Single item edge case")
 
     print("All sort_by_document_order() tests passed! ✅\n")
@@ -144,87 +145,87 @@ def test_merge_adjacent_chunks():
 
     # Test 1: Merge two adjacent chunks (touching)
     chunks = [
-        {'corpus': 'docs', 'location': 'f.txt:1-10', 'score': 0.9, 'chunk': 'First chunk'},
-        {'corpus': 'docs', 'location': 'f.txt:11-20', 'score': 0.8, 'chunk': 'Second chunk'}
+        {"corpus": "docs", "location": "f.txt:1-10", "score": 0.9, "chunk": "First chunk"},
+        {"corpus": "docs", "location": "f.txt:11-20", "score": 0.8, "chunk": "Second chunk"},
     ]
     merged = merge_adjacent_chunks(chunks)
     assert len(merged) == 1
-    assert merged[0]['location'] == 'f.txt:1-20'
-    assert merged[0]['score'] == 0.9  # Kept highest score
-    assert merged[0]['chunk'] == 'First chunk\nSecond chunk'
+    assert merged[0]["location"] == "f.txt:1-20"
+    assert merged[0]["score"] == 0.9  # Kept highest score
+    assert merged[0]["chunk"] == "First chunk\nSecond chunk"
     print("✓ Merge two touching chunks")
 
     # Test 2: Merge overlapping chunks
     chunks = [
-        {'corpus': 'docs', 'location': 'f.txt:1-15', 'score': 0.9, 'chunk': 'Overlap A'},
-        {'corpus': 'docs', 'location': 'f.txt:10-20', 'score': 0.8, 'chunk': 'Overlap B'}
+        {"corpus": "docs", "location": "f.txt:1-15", "score": 0.9, "chunk": "Overlap A"},
+        {"corpus": "docs", "location": "f.txt:10-20", "score": 0.8, "chunk": "Overlap B"},
     ]
     merged = merge_adjacent_chunks(chunks)
     assert len(merged) == 1
-    assert merged[0]['location'] == 'f.txt:1-20'
-    assert merged[0]['score'] == 0.9
+    assert merged[0]["location"] == "f.txt:1-20"
+    assert merged[0]["score"] == 0.9
     print("✓ Merge overlapping chunks")
 
     # Test 3: Do NOT merge chunks with gap
     chunks = [
-        {'corpus': 'docs', 'location': 'f.txt:1-10', 'score': 0.9, 'chunk': 'Gap A'},
-        {'corpus': 'docs', 'location': 'f.txt:15-20', 'score': 0.8, 'chunk': 'Gap B'}
+        {"corpus": "docs", "location": "f.txt:1-10", "score": 0.9, "chunk": "Gap A"},
+        {"corpus": "docs", "location": "f.txt:15-20", "score": 0.8, "chunk": "Gap B"},
     ]
     merged = merge_adjacent_chunks(chunks)
     assert len(merged) == 2
-    assert merged[0]['location'] == 'f.txt:1-10'
-    assert merged[1]['location'] == 'f.txt:15-20'
+    assert merged[0]["location"] == "f.txt:1-10"
+    assert merged[1]["location"] == "f.txt:15-20"
     print("✓ Do NOT merge chunks with gap")
 
     # Test 4: Do NOT merge chunks from different files
     chunks = [
-        {'corpus': 'docs', 'location': 'a.txt:1-10', 'score': 0.9, 'chunk': 'File A'},
-        {'corpus': 'docs', 'location': 'b.txt:1-10', 'score': 0.8, 'chunk': 'File B'}
+        {"corpus": "docs", "location": "a.txt:1-10", "score": 0.9, "chunk": "File A"},
+        {"corpus": "docs", "location": "b.txt:1-10", "score": 0.8, "chunk": "File B"},
     ]
     merged = merge_adjacent_chunks(chunks)
     assert len(merged) == 2
-    assert merged[0]['location'] == 'a.txt:1-10'
-    assert merged[1]['location'] == 'b.txt:1-10'
+    assert merged[0]["location"] == "a.txt:1-10"
+    assert merged[1]["location"] == "b.txt:1-10"
     print("✓ Do NOT merge chunks from different files")
 
     # Test 5: Do NOT merge chunks from different corpuses
     chunks = [
-        {'corpus': 'docs', 'location': 'f.txt:1-10', 'score': 0.9, 'chunk': 'Corpus A'},
-        {'corpus': 'code', 'location': 'f.txt:11-20', 'score': 0.8, 'chunk': 'Corpus B'}
+        {"corpus": "docs", "location": "f.txt:1-10", "score": 0.9, "chunk": "Corpus A"},
+        {"corpus": "code", "location": "f.txt:11-20", "score": 0.8, "chunk": "Corpus B"},
     ]
     merged = merge_adjacent_chunks(chunks)
     assert len(merged) == 2
-    assert merged[0]['corpus'] == 'docs'
-    assert merged[1]['corpus'] == 'code'
+    assert merged[0]["corpus"] == "docs"
+    assert merged[1]["corpus"] == "code"
     print("✓ Do NOT merge chunks from different corpuses")
 
     # Test 6: Merge multiple consecutive chunks
     chunks = [
-        {'corpus': 'docs', 'location': 'f.txt:1-10', 'score': 0.9, 'chunk': 'A'},
-        {'corpus': 'docs', 'location': 'f.txt:11-20', 'score': 0.8, 'chunk': 'B'},
-        {'corpus': 'docs', 'location': 'f.txt:21-30', 'score': 0.7, 'chunk': 'C'},
-        {'corpus': 'docs', 'location': 'f.txt:31-40', 'score': 0.6, 'chunk': 'D'}
+        {"corpus": "docs", "location": "f.txt:1-10", "score": 0.9, "chunk": "A"},
+        {"corpus": "docs", "location": "f.txt:11-20", "score": 0.8, "chunk": "B"},
+        {"corpus": "docs", "location": "f.txt:21-30", "score": 0.7, "chunk": "C"},
+        {"corpus": "docs", "location": "f.txt:31-40", "score": 0.6, "chunk": "D"},
     ]
     merged = merge_adjacent_chunks(chunks)
     assert len(merged) == 1
-    assert merged[0]['location'] == 'f.txt:1-40'
-    assert merged[0]['score'] == 0.9  # Kept highest score
-    assert merged[0]['chunk'] == 'A\nB\nC\nD'
+    assert merged[0]["location"] == "f.txt:1-40"
+    assert merged[0]["score"] == 0.9  # Kept highest score
+    assert merged[0]["chunk"] == "A\nB\nC\nD"
     print("✓ Merge multiple consecutive chunks")
 
     # Test 7: Complex scenario - merge some, keep others
     chunks = [
-        {'corpus': 'docs', 'location': 'a.txt:1-10', 'score': 0.9, 'chunk': 'A1'},
-        {'corpus': 'docs', 'location': 'a.txt:11-20', 'score': 0.8, 'chunk': 'A2'},
-        {'corpus': 'docs', 'location': 'a.txt:30-40', 'score': 0.7, 'chunk': 'A3'},  # Gap
-        {'corpus': 'docs', 'location': 'b.txt:1-10', 'score': 0.6, 'chunk': 'B1'},   # Different file
-        {'corpus': 'docs', 'location': 'b.txt:11-20', 'score': 0.5, 'chunk': 'B2'}
+        {"corpus": "docs", "location": "a.txt:1-10", "score": 0.9, "chunk": "A1"},
+        {"corpus": "docs", "location": "a.txt:11-20", "score": 0.8, "chunk": "A2"},
+        {"corpus": "docs", "location": "a.txt:30-40", "score": 0.7, "chunk": "A3"},  # Gap
+        {"corpus": "docs", "location": "b.txt:1-10", "score": 0.6, "chunk": "B1"},  # Different file
+        {"corpus": "docs", "location": "b.txt:11-20", "score": 0.5, "chunk": "B2"},
     ]
     merged = merge_adjacent_chunks(chunks)
     assert len(merged) == 3
-    assert merged[0]['location'] == 'a.txt:1-20'   # A1+A2 merged
-    assert merged[1]['location'] == 'a.txt:30-40'  # A3 alone (gap)
-    assert merged[2]['location'] == 'b.txt:1-20'   # B1+B2 merged
+    assert merged[0]["location"] == "a.txt:1-20"  # A1+A2 merged
+    assert merged[1]["location"] == "a.txt:30-40"  # A3 alone (gap)
+    assert merged[2]["location"] == "b.txt:1-20"  # B1+B2 merged
     print("✓ Complex scenario - selective merging")
 
     # Test 8: Empty list
@@ -233,20 +234,20 @@ def test_merge_adjacent_chunks():
     print("✓ Empty list edge case")
 
     # Test 9: Single chunk
-    chunks = [{'corpus': 'test', 'location': 'f.txt:1-10', 'score': 0.5, 'chunk': 'Solo'}]
+    chunks = [{"corpus": "test", "location": "f.txt:1-10", "score": 0.5, "chunk": "Solo"}]
     merged = merge_adjacent_chunks(chunks)
     assert len(merged) == 1
-    assert merged[0]['chunk'] == 'Solo'
+    assert merged[0]["chunk"] == "Solo"
     print("✓ Single chunk edge case")
 
     # Test 10: Chunks with same start line (overlapping)
     chunks = [
-        {'corpus': 'docs', 'location': 'f.txt:1-10', 'score': 0.9, 'chunk': 'First'},
-        {'corpus': 'docs', 'location': 'f.txt:1-15', 'score': 0.8, 'chunk': 'Second'}
+        {"corpus": "docs", "location": "f.txt:1-10", "score": 0.9, "chunk": "First"},
+        {"corpus": "docs", "location": "f.txt:1-15", "score": 0.8, "chunk": "Second"},
     ]
     merged = merge_adjacent_chunks(chunks)
     assert len(merged) == 1
-    assert merged[0]['location'] == 'f.txt:1-15'
+    assert merged[0]["location"] == "f.txt:1-15"
     print("✓ Chunks with same start line")
 
     print("All merge_adjacent_chunks() tests passed! ✅\n")
@@ -258,22 +259,42 @@ def test_integration():
 
     # Realistic scenario: chunks from multiple files, out of order
     chunks = [
-        {'corpus': 'docs', 'location': 'chapter3.txt:200-300', 'score': 0.9, 'chunk': 'Chapter 3 part 2'},
-        {'corpus': 'docs', 'location': 'chapter1.txt:50-100', 'score': 0.8, 'chunk': 'Chapter 1 part 2'},
-        {'corpus': 'docs', 'location': 'chapter1.txt:1-49', 'score': 0.85, 'chunk': 'Chapter 1 part 1'},
-        {'corpus': 'docs', 'location': 'chapter3.txt:1-199', 'score': 0.7, 'chunk': 'Chapter 3 part 1'},
-        {'corpus': 'docs', 'location': 'chapter2.txt:1-100', 'score': 0.6, 'chunk': 'Chapter 2'},
+        {
+            "corpus": "docs",
+            "location": "chapter3.txt:200-300",
+            "score": 0.9,
+            "chunk": "Chapter 3 part 2",
+        },
+        {
+            "corpus": "docs",
+            "location": "chapter1.txt:50-100",
+            "score": 0.8,
+            "chunk": "Chapter 1 part 2",
+        },
+        {
+            "corpus": "docs",
+            "location": "chapter1.txt:1-49",
+            "score": 0.85,
+            "chunk": "Chapter 1 part 1",
+        },
+        {
+            "corpus": "docs",
+            "location": "chapter3.txt:1-199",
+            "score": 0.7,
+            "chunk": "Chapter 3 part 1",
+        },
+        {"corpus": "docs", "location": "chapter2.txt:1-100", "score": 0.6, "chunk": "Chapter 2"},
     ]
 
     # Step 1: Sort by document order
     sorted_chunks = sort_by_document_order(chunks)
 
     # Verify sort order
-    assert sorted_chunks[0]['location'] == 'chapter1.txt:1-49'
-    assert sorted_chunks[1]['location'] == 'chapter1.txt:50-100'
-    assert sorted_chunks[2]['location'] == 'chapter2.txt:1-100'
-    assert sorted_chunks[3]['location'] == 'chapter3.txt:1-199'
-    assert sorted_chunks[4]['location'] == 'chapter3.txt:200-300'
+    assert sorted_chunks[0]["location"] == "chapter1.txt:1-49"
+    assert sorted_chunks[1]["location"] == "chapter1.txt:50-100"
+    assert sorted_chunks[2]["location"] == "chapter2.txt:1-100"
+    assert sorted_chunks[3]["location"] == "chapter3.txt:1-199"
+    assert sorted_chunks[4]["location"] == "chapter3.txt:200-300"
     print("✓ Chunks sorted in document order")
 
     # Step 2: Merge adjacent chunks
@@ -281,16 +302,16 @@ def test_integration():
 
     # Verify merging
     assert len(merged) == 3  # Chapter 1 (merged), Chapter 2, Chapter 3 (merged)
-    assert merged[0]['location'] == 'chapter1.txt:1-100'
-    assert merged[0]['chunk'] == 'Chapter 1 part 1\nChapter 1 part 2'
-    assert merged[0]['score'] == 0.85  # Highest score from merged chunks
+    assert merged[0]["location"] == "chapter1.txt:1-100"
+    assert merged[0]["chunk"] == "Chapter 1 part 1\nChapter 1 part 2"
+    assert merged[0]["score"] == 0.85  # Highest score from merged chunks
 
-    assert merged[1]['location'] == 'chapter2.txt:1-100'
-    assert merged[1]['chunk'] == 'Chapter 2'
+    assert merged[1]["location"] == "chapter2.txt:1-100"
+    assert merged[1]["chunk"] == "Chapter 2"
 
-    assert merged[2]['location'] == 'chapter3.txt:1-300'
-    assert merged[2]['chunk'] == 'Chapter 3 part 1\nChapter 3 part 2'
-    assert merged[2]['score'] == 0.9
+    assert merged[2]["location"] == "chapter3.txt:1-300"
+    assert merged[2]["chunk"] == "Chapter 3 part 1\nChapter 3 part 2"
+    assert merged[2]["score"] == 0.9
 
     print("✓ Adjacent chunks merged correctly")
     print("✓ Scores preserved correctly (max)")
@@ -301,9 +322,9 @@ def test_integration():
 
 def main():
     """Run all tests."""
-    print("="*80)
+    print("=" * 80)
     print("SEAR Boolean Logic - Task 2: Document Order Preservation Tests")
-    print("="*80)
+    print("=" * 80)
 
     try:
         test_parse_location()
@@ -311,9 +332,9 @@ def main():
         test_merge_adjacent_chunks()
         test_integration()
 
-        print("="*80)
+        print("=" * 80)
         print("✅ ALL TESTS PASSED ✅")
-        print("="*80)
+        print("=" * 80)
         print("\nTask 2 Implementation Complete!")
         print("Ready to move to Task 3: JSON Query Executor")
         print()
@@ -326,9 +347,10 @@ def main():
     except Exception as e:
         print(f"\n❌ ERROR: {e}")
         import traceback
+
         traceback.print_exc()
         return 1
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

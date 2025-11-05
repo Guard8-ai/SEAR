@@ -7,34 +7,37 @@ For programmatic use, import sear instead:
     from sear import index_file, search, list_corpuses
 """
 
-import sys
 import os
+import sys
+
 from .core import (
-    index_file,
-    search,
-    extract_relevant_content,
-    validate_input_file,
-    list_corpuses,
-    get_corpus_info,
+    anthropic_generate,
     delete_corpus,
-    is_gpu_available,
-    get_gpu_info,
     execute_query,
-    parse_sql_query,
     execute_sql_query,
+    extract_relevant_content,
+    get_corpus_info,
+    get_gpu_info,
+    index_file,
+    is_gpu_available,
+    list_corpuses,
     ollama_generate,
-    anthropic_generate
+    search,
 )
 
 # Optional document converter support
 try:
-    from ..doc_converter import convert_document, DOCX_AVAILABLE
+    from ..doc_converter import DOCX_AVAILABLE, convert_document
+
     CONVERTER_AVAILABLE = True
 except ImportError:
     CONVERTER_AVAILABLE = False
     DOCX_AVAILABLE = False
 
-def send_chunks_to_llm(chunks, query, temperature=0.0, provider='ollama', api_key=None, verbose=True):
+
+def send_chunks_to_llm(
+    chunks, query, temperature=0.0, provider="ollama", api_key=None, verbose=True
+):
     """
     Send filtered chunks to LLM for answer generation.
 
@@ -53,10 +56,10 @@ def send_chunks_to_llm(chunks, query, temperature=0.0, provider='ollama', api_ke
         if verbose:
             print("❌ No chunks found matching the query")
         return {
-            'answer': 'No results found matching your query.',
-            'sources': [],
-            'quality_results': 0,
-            'filtered_count': 0
+            "answer": "No results found matching your query.",
+            "sources": [],
+            "quality_results": 0,
+            "filtered_count": 0,
         }
 
     if verbose:
@@ -80,33 +83,43 @@ Instructions:
 Answer:"""
 
     # Generate answer
-    if provider == 'anthropic':
+    if provider == "anthropic":
         answer = anthropic_generate(prompt, temperature=temperature, api_key=api_key)
     else:
         answer = ollama_generate(prompt, temperature=temperature)
 
     if verbose:
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
         print("ANSWER")
-        print("="*80)
+        print("=" * 80)
         print(answer)
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
         print("SOURCES")
-        print("="*80)
+        print("=" * 80)
         for i, result in enumerate(chunks, 1):
             print(f"{i}. [{result['corpus']}] {result['location']} (score: {result['score']:.3f})")
             print(f"   {result['chunk'][:200]}...")
             print()
-        print("="*80)
+        print("=" * 80)
 
     return {
-        'answer': answer,
-        'sources': chunks,
-        'quality_results': len(chunks),
-        'filtered_count': 0
+        "answer": answer,
+        "sources": chunks,
+        "quality_results": len(chunks),
+        "filtered_count": 0,
     }
 
-def build_boolean_query(query, exclude=None, union=False, corpuses=None, min_score=0.3, max_chunks=None, semantic=False, threshold=0.7):
+
+def build_boolean_query(
+    query,
+    exclude=None,
+    union=False,
+    corpuses=None,
+    min_score=0.3,
+    max_chunks=None,
+    semantic=False,
+    threshold=0.7,
+):
     """
     Convert CLI boolean arguments to JSON query format for execute_query().
 
@@ -145,62 +158,54 @@ def build_boolean_query(query, exclude=None, union=False, corpuses=None, min_sco
         {"operation": "difference", "query": "physics", "exclude": "mechanics", "semantic": True, "threshold": 0.75, ...}
     """
     # Base options
-    query_spec = {
-        'min_score': min_score,
-        'sort': True,
-        'merge_adjacent': True
-    }
+    query_spec = {"min_score": min_score, "sort": True, "merge_adjacent": True}
 
     if corpuses:
-        query_spec['corpuses'] = corpuses
+        query_spec["corpuses"] = corpuses
     if max_chunks:
-        query_spec['max_results'] = max_chunks
+        query_spec["max_results"] = max_chunks
 
     # Parse main query (handle union flag)
     if union:
         # Split by comma and strip whitespace
-        queries = [q.strip() for q in query.split(',') if q.strip()]
+        queries = [q.strip() for q in query.split(",") if q.strip()]
         if len(queries) < 2:
             raise ValueError("Union requires at least 2 comma-separated queries")
-        main_query = {
-            'operation': 'union',
-            'queries': queries
-        }
+        main_query = {"operation": "union", "queries": queries}
     else:
         # Simple query
-        main_query = {'query': query}
+        main_query = {"query": query}
 
     # Parse exclusion (handle multiple exclusions)
     if exclude:
-        exclude_queries = [q.strip() for q in exclude.split(',') if q.strip()]
+        exclude_queries = [q.strip() for q in exclude.split(",") if q.strip()]
 
         if len(exclude_queries) == 1:
             # Single exclusion
-            exclude_query = {'query': exclude_queries[0]}
+            exclude_query = {"query": exclude_queries[0]}
         else:
             # Multiple exclusions: union them first
-            exclude_query = {
-                'operation': 'union',
-                'queries': exclude_queries
-            }
+            exclude_query = {"operation": "union", "queries": exclude_queries}
 
         # Build difference operation
-        query_spec['operation'] = 'difference'
-        query_spec['left'] = main_query
-        query_spec['right'] = exclude_query
+        query_spec["operation"] = "difference"
+        query_spec["left"] = main_query
+        query_spec["right"] = exclude_query
         # Add semantic filtering options if enabled
         if semantic:
-            query_spec['semantic'] = True
-            query_spec['threshold'] = threshold
+            query_spec["semantic"] = True
+            query_spec["threshold"] = threshold
     else:
         # No exclusion: use main query directly
         query_spec.update(main_query)
 
     return query_spec
 
+
 def main():
     if len(sys.argv) < 2:
-        print("""
+        print(
+            """
 SEAR: Summarization-Enhanced Augmented Retrieval
 (Ollama-based FAISS semantic search, no external APIs needed)
 
@@ -351,7 +356,8 @@ Library Usage:
     from sear_core import index_file, search, list_corpuses
     index_file("code.txt", "my-corpus")
     results = search("my query", corpuses=["my-corpus"])
-""")
+"""
+        )
         sys.exit(1)
 
     cmd = sys.argv[1]
@@ -369,11 +375,11 @@ Library Usage:
 
         # Parse remaining arguments
         for i in range(3, len(sys.argv)):
-            if sys.argv[i] == '--gpu':
+            if sys.argv[i] == "--gpu":
                 use_gpu = True
-            elif sys.argv[i] == '--no-gpu':
+            elif sys.argv[i] == "--no-gpu":
                 use_gpu = False
-            elif corpus_name is None and not sys.argv[i].startswith('--'):
+            elif corpus_name is None and not sys.argv[i].startswith("--"):
                 corpus_name = sys.argv[i]
 
         try:
@@ -385,7 +391,9 @@ Library Usage:
     elif cmd == "search":
         if len(sys.argv) < 3:
             print("❌ Error: Missing search query")
-            print("Usage: python sear.py search \"query\" [--corpus name1,name2,...] [--exclude \"query\"] [--union] [--semantic] [--threshold 0.7] [--temperature 0.0-1.0] [--provider ollama|anthropic] [--api-key KEY] [--gpu|--no-gpu]")
+            print(
+                'Usage: python sear.py search "query" [--corpus name1,name2,...] [--exclude "query"] [--union] [--semantic] [--threshold 0.7] [--temperature 0.0-1.0] [--provider ollama|anthropic] [--api-key KEY] [--gpu|--no-gpu]'
+            )
             sys.exit(1)
 
         # Parse arguments
@@ -398,7 +406,7 @@ Library Usage:
         semantic_threshold = 0.7
         temperature = 0.0
         use_gpu = None
-        provider = 'ollama'
+        provider = "ollama"
         api_key = None
 
         i = 0
@@ -407,7 +415,7 @@ Library Usage:
                 if i + 1 >= len(args):
                     print("❌ Error: --corpus flag requires corpus names")
                     sys.exit(1)
-                corpuses = args[i + 1].split(',')
+                corpuses = args[i + 1].split(",")
                 i += 2
             elif args[i] == "--exclude":
                 if i + 1 >= len(args):
@@ -452,8 +460,10 @@ Library Usage:
                     print("❌ Error: --provider flag requires a value (ollama or anthropic)")
                     sys.exit(1)
                 provider = args[i + 1]
-                if provider not in ['ollama', 'anthropic']:
-                    print(f"❌ Error: invalid provider '{provider}' (must be 'ollama' or 'anthropic')")
+                if provider not in ["ollama", "anthropic"]:
+                    print(
+                        f"❌ Error: invalid provider '{provider}' (must be 'ollama' or 'anthropic')"
+                    )
                     sys.exit(1)
                 i += 2
             elif args[i] == "--api-key":
@@ -472,7 +482,7 @@ Library Usage:
                 query_parts.append(args[i])
                 i += 1
 
-        query = ' '.join(query_parts)
+        query = " ".join(query_parts)
         if not query:
             print("❌ Error: Missing search query")
             sys.exit(1)
@@ -489,17 +499,31 @@ Library Usage:
                     min_score=0.3,  # Use default for search
                     max_chunks=None,
                     semantic=use_semantic,
-                    threshold=semantic_threshold
+                    threshold=semantic_threshold,
                 )
 
                 # Execute boolean query to get filtered chunks
                 chunks = execute_query(query_spec, use_gpu=use_gpu, verbose=True)
 
                 # Send filtered chunks to LLM for answer generation
-                send_chunks_to_llm(chunks, query, temperature=temperature, provider=provider, api_key=api_key, verbose=True)
+                send_chunks_to_llm(
+                    chunks,
+                    query,
+                    temperature=temperature,
+                    provider=provider,
+                    api_key=api_key,
+                    verbose=True,
+                )
             else:
                 # Standard search without boolean operations
-                search(query, corpuses=corpuses, temperature=temperature, use_gpu=use_gpu, provider=provider, api_key=api_key)
+                search(
+                    query,
+                    corpuses=corpuses,
+                    temperature=temperature,
+                    use_gpu=use_gpu,
+                    provider=provider,
+                    api_key=api_key,
+                )
         except (FileNotFoundError, ValueError) as e:
             print(f"❌ Error: {e}")
             sys.exit(1)
@@ -507,7 +531,9 @@ Library Usage:
     elif cmd == "extract":
         if len(sys.argv) < 3:
             print("❌ Error: Missing search query")
-            print("Usage: python sear.py extract \"query\" [--output file.txt] [--corpus name1,name2,...] [--exclude \"query\"] [--union] [--semantic] [--threshold 0.7] [--min-score 0.3] [--max-chunks N] [--gpu|--no-gpu]")
+            print(
+                'Usage: python sear.py extract "query" [--output file.txt] [--corpus name1,name2,...] [--exclude "query"] [--union] [--semantic] [--threshold 0.7] [--min-score 0.3] [--max-chunks N] [--gpu|--no-gpu]'
+            )
             sys.exit(1)
 
         # Parse arguments
@@ -535,7 +561,7 @@ Library Usage:
                 if i + 1 >= len(args):
                     print("❌ Error: --corpus flag requires corpus names")
                     sys.exit(1)
-                corpuses = args[i + 1].split(',')
+                corpuses = args[i + 1].split(",")
                 i += 2
             elif args[i] == "--exclude":
                 if i + 1 >= len(args):
@@ -585,7 +611,9 @@ Library Usage:
                         print("❌ Error: max-chunks must be a positive number")
                         sys.exit(1)
                 except ValueError:
-                    print(f"❌ Error: invalid max-chunks value '{args[i + 1]}' (must be an integer)")
+                    print(
+                        f"❌ Error: invalid max-chunks value '{args[i + 1]}' (must be an integer)"
+                    )
                     sys.exit(1)
                 i += 2
             elif args[i] == "--gpu":
@@ -598,7 +626,7 @@ Library Usage:
                 query_parts.append(args[i])
                 i += 1
 
-        query = ' '.join(query_parts)
+        query = " ".join(query_parts)
         if not query:
             print("❌ Error: Missing search query")
             sys.exit(1)
@@ -615,7 +643,7 @@ Library Usage:
                     min_score=min_score,
                     max_chunks=max_chunks,
                     semantic=use_semantic,
-                    threshold=semantic_threshold
+                    threshold=semantic_threshold,
                 )
 
                 # Execute boolean query to get filtered chunks
@@ -625,21 +653,21 @@ Library Usage:
                 if output_file is None:
                     output_file = "extracted_content.txt"
 
-                with open(output_file, 'w') as f:
+                with open(output_file, "w") as f:
                     f.write(f"# Extracted Content for Query: {query}\n")
                     f.write(f"# Total chunks: {len(chunks)}\n")
                     if exclude_query:
                         f.write(f"# Excluded: {exclude_query}\n")
                     if use_union:
-                        f.write(f"# Union mode: enabled\n")
-                    f.write("\n" + "="*80 + "\n\n")
+                        f.write("# Union mode: enabled\n")
+                    f.write("\n" + "=" * 80 + "\n\n")
 
                     for i, chunk in enumerate(chunks, 1):
                         f.write(f"## Chunk {i} from {chunk['corpus']}\n")
                         f.write(f"Location: {chunk['location']}\n")
                         f.write(f"Score: {chunk['score']:.3f}\n\n")
-                        f.write(chunk['chunk'])
-                        f.write("\n\n" + "-"*80 + "\n\n")
+                        f.write(chunk["chunk"])
+                        f.write("\n\n" + "-" * 80 + "\n\n")
 
                 print(f"✅ Extracted {len(chunks)} chunks to: {output_file}")
             else:
@@ -651,7 +679,7 @@ Library Usage:
                     min_score=min_score,
                     max_chunks=max_chunks,
                     use_gpu=use_gpu,
-                    verbose=True
+                    verbose=True,
                 )
         except (FileNotFoundError, ValueError) as e:
             print(f"❌ Error: {e}")
@@ -661,48 +689,54 @@ Library Usage:
         if len(sys.argv) < 3:
             print("❌ Error: Missing SQL query")
             print(r'Usage: python sear.py sql "SELECT * FROM search(\"query\") ..."')
-            print('\nExamples:')
-            print('  # Simple query')
+            print("\nExamples:")
+            print("  # Simple query")
             print(r'  python sear.py sql "SELECT * FROM search(\"physics\")"')
-            print('')
-            print('  # Union (OR)')
-            print(r'  python sear.py sql "SELECT * FROM search(\"security\") UNION SELECT * FROM search(\"auth\")"')
-            print('')
-            print('  # Difference (EXCEPT)')
-            print(r'  python sear.py sql "SELECT * FROM search(\"physics\") EXCEPT SELECT * FROM search(\"mechanics\")"')
-            print('')
-            print('  # With options (WHERE clause)')
-            print(r'  python sear.py sql "SELECT * FROM search(\"security\") WHERE corpus IN (\'backend\', \'api\') AND min_score >= 0.35"')
+            print("")
+            print("  # Union (OR)")
+            print(
+                r'  python sear.py sql "SELECT * FROM search(\"security\") UNION SELECT * FROM search(\"auth\")"'
+            )
+            print("")
+            print("  # Difference (EXCEPT)")
+            print(
+                r'  python sear.py sql "SELECT * FROM search(\"physics\") EXCEPT SELECT * FROM search(\"mechanics\")"'
+            )
+            print("")
+            print("  # With options (WHERE clause)")
+            print(
+                r'  python sear.py sql "SELECT * FROM search(\"security\") WHERE corpus IN (\'backend\', \'api\') AND min_score >= 0.35"'
+            )
             sys.exit(1)
 
         # Parse remaining arguments
         sql_query = sys.argv[2]
         use_gpu = None
-        mode = 'search'  # default mode
+        mode = "search"  # default mode
         temperature = 0.0
-        provider = 'ollama'
+        provider = "ollama"
         api_key = None
         output_file = None
 
         # Parse additional flags
         i = 3
         while i < len(sys.argv):
-            if sys.argv[i] == '--gpu':
+            if sys.argv[i] == "--gpu":
                 use_gpu = True
                 i += 1
-            elif sys.argv[i] == '--no-gpu':
+            elif sys.argv[i] == "--no-gpu":
                 use_gpu = False
                 i += 1
-            elif sys.argv[i] == '--mode':
+            elif sys.argv[i] == "--mode":
                 if i + 1 >= len(sys.argv):
                     print("❌ Error: --mode flag requires a value (search|extract)")
                     sys.exit(1)
                 mode = sys.argv[i + 1]
-                if mode not in ['search', 'extract']:
+                if mode not in ["search", "extract"]:
                     print("❌ Error: --mode must be 'search' or 'extract'")
                     sys.exit(1)
                 i += 2
-            elif sys.argv[i] == '--temperature':
+            elif sys.argv[i] == "--temperature":
                 if i + 1 >= len(sys.argv):
                     print("❌ Error: --temperature flag requires a value (0.0-1.0)")
                     sys.exit(1)
@@ -715,22 +749,22 @@ Library Usage:
                     print("❌ Error: Temperature must be a number")
                     sys.exit(1)
                 i += 2
-            elif sys.argv[i] == '--provider':
+            elif sys.argv[i] == "--provider":
                 if i + 1 >= len(sys.argv):
                     print("❌ Error: --provider flag requires a value (ollama|anthropic)")
                     sys.exit(1)
                 provider = sys.argv[i + 1]
-                if provider not in ['ollama', 'anthropic']:
+                if provider not in ["ollama", "anthropic"]:
                     print("❌ Error: --provider must be 'ollama' or 'anthropic'")
                     sys.exit(1)
                 i += 2
-            elif sys.argv[i] == '--api-key':
+            elif sys.argv[i] == "--api-key":
                 if i + 1 >= len(sys.argv):
                     print("❌ Error: --api-key flag requires a value")
                     sys.exit(1)
                 api_key = sys.argv[i + 1]
                 i += 2
-            elif sys.argv[i] == '--output':
+            elif sys.argv[i] == "--output":
                 if i + 1 >= len(sys.argv):
                     print("❌ Error: --output flag requires a file path")
                     sys.exit(1)
@@ -752,17 +786,17 @@ Library Usage:
             print(f"\n✅ Found {len(chunks)} chunks matching SQL query")
 
             # Mode: search (send to LLM) or extract (save to file)
-            if mode == 'search':
+            if mode == "search":
                 # Send to LLM for answer generation
                 # Extract original query from SQL for the prompt
                 # For now, we'll use a generic prompt mentioning SQL query
-                result = send_chunks_to_llm(
+                send_chunks_to_llm(
                     chunks,
                     query=f"Results from SQL query: {sql_query}",
                     temperature=temperature,
                     provider=provider,
                     api_key=api_key,
-                    verbose=True
+                    verbose=True,
                 )
             else:
                 # Extract mode: save to file
@@ -770,13 +804,15 @@ Library Usage:
                     output_file = "extracted_sql_results.txt"
 
                 # Format and save content
-                with open(output_file, 'w', encoding='utf-8') as f:
+                with open(output_file, "w", encoding="utf-8") as f:
                     f.write(f"SQL Query: {sql_query}\n")
                     f.write(f"Total chunks: {len(chunks)}\n")
                     f.write("=" * 80 + "\n\n")
 
                     for i, chunk in enumerate(chunks, 1):
-                        f.write(f"[{i}] {chunk['corpus']} - {chunk['location']} (score: {chunk['score']:.3f})\n")
+                        f.write(
+                            f"[{i}] {chunk['corpus']} - {chunk['location']} (score: {chunk['score']:.3f})\n"
+                        )
                         f.write(f"{chunk['chunk']}\n")
                         f.write("\n" + "-" * 80 + "\n\n")
 
@@ -788,6 +824,7 @@ Library Usage:
         except Exception as e:
             print(f"❌ Error executing SQL query: {e}")
             import traceback
+
             traceback.print_exc()
             sys.exit(1)
 
@@ -803,9 +840,9 @@ Library Usage:
         for corpus_name in corpuses:
             try:
                 info = get_corpus_info(corpus_name)
-                chunk_count = info.get('chunk_count', '?')
-                model = info.get('embedding_model', '?')
-                dim = info.get('embedding_dim', '?')
+                chunk_count = info.get("chunk_count", "?")
+                model = info.get("embedding_model", "?")
+                dim = info.get("embedding_dim", "?")
                 print(f"  {corpus_name}")
                 print(f"    - Chunks: {chunk_count}")
                 print(f"    - Model: {model} ({dim}d)")
@@ -832,13 +869,15 @@ Library Usage:
         if not CONVERTER_AVAILABLE:
             print("❌ Error: Document converter not installed")
             print("\nTo enable document conversion:")
-            print("  pip install -e \".[converter]\"")
+            print('  pip install -e ".[converter]"')
             print("\nThis will install support for PDF and DOCX conversion to markdown.")
             sys.exit(1)
 
         if len(sys.argv) < 3:
             print("❌ Error: Missing file path")
-            print("Usage: python sear.py convert <file.pdf|file.docx> [--output-dir DIR] [--no-normalize] [--force-ocr] [--lang heb|eng|heb+eng]")
+            print(
+                "Usage: python sear.py convert <file.pdf|file.docx> [--output-dir DIR] [--no-normalize] [--force-ocr] [--lang heb|eng|heb+eng]"
+            )
             sys.exit(1)
 
         # Parse arguments
@@ -851,16 +890,16 @@ Library Usage:
         # Parse flags
         i = 3
         while i < len(sys.argv):
-            if sys.argv[i] == '--output-dir' and i + 1 < len(sys.argv):
+            if sys.argv[i] == "--output-dir" and i + 1 < len(sys.argv):
                 output_dir = sys.argv[i + 1]
                 i += 2
-            elif sys.argv[i] == '--no-normalize':
+            elif sys.argv[i] == "--no-normalize":
                 normalize = False
                 i += 1
-            elif sys.argv[i] == '--force-ocr':
+            elif sys.argv[i] == "--force-ocr":
                 force_ocr = True
                 i += 1
-            elif sys.argv[i] == '--lang' and i + 1 < len(sys.argv):
+            elif sys.argv[i] == "--lang" and i + 1 < len(sys.argv):
                 lang = sys.argv[i + 1]
                 i += 2
             else:
@@ -874,25 +913,23 @@ Library Usage:
 
         # Check file format
         ext = os.path.splitext(filepath.lower())[1]
-        if ext not in ['.pdf', '.docx']:
+        if ext not in [".pdf", ".docx"]:
             print(f"❌ Error: Unsupported format: {ext}")
             print("Supported formats: .pdf" + (", .docx" if DOCX_AVAILABLE else ""))
             sys.exit(1)
 
         try:
             print(f"📄 Converting {os.path.basename(filepath)}...")
-            kwargs = {
-                'output_dir': output_dir,
-                'force_ocr': force_ocr,
-                'normalize': normalize
-            }
+            kwargs = {"output_dir": output_dir, "force_ocr": force_ocr, "normalize": normalize}
             if lang is not None:
-                kwargs['lang'] = lang
+                kwargs["lang"] = lang
 
             success, elapsed, metadata = convert_document(filepath, **kwargs)
 
             if success:
-                output_file = os.path.join(output_dir, os.path.splitext(os.path.basename(filepath))[0] + '.md')
+                output_file = os.path.join(
+                    output_dir, os.path.splitext(os.path.basename(filepath))[0] + ".md"
+                )
                 print(f"✅ Converted in {elapsed:.2f}s")
                 print(f"   Pages: {metadata.get('pages', '?')}")
                 print(f"   Language: {metadata.get('language', '?')}")
@@ -909,16 +946,16 @@ Library Usage:
             sys.exit(1)
 
     elif cmd == "gpu-info":
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
         print("GPU INFORMATION")
-        print("="*80)
+        print("=" * 80)
 
         if is_gpu_available():
             gpu_info = get_gpu_info()
-            print(f"✅ GPU acceleration available")
+            print("✅ GPU acceleration available")
             print(f"   Number of GPUs: {gpu_info.get('num_gpus', 'Unknown')}")
-            print(f"\nGPU support will be automatically used for faster indexing and search.")
-            print(f"Use --no-gpu flag to disable GPU acceleration if needed.")
+            print("\nGPU support will be automatically used for faster indexing and search.")
+            print("Use --no-gpu flag to disable GPU acceleration if needed.")
         else:
             print("❌ GPU acceleration not available")
             print("\nTo enable GPU support:")
@@ -927,12 +964,13 @@ Library Usage:
             print("  3. Install faiss-gpu: pip install faiss-gpu")
             print("\nSEAR will continue to work with CPU (slower but functional).")
 
-        print("="*80)
+        print("=" * 80)
 
     else:
         print(f"❌ Unknown command: {cmd}")
         print("Valid commands: index, search, extract, convert, list, delete, gpu-info")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

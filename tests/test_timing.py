@@ -3,10 +3,12 @@
 Test script to measure SEAR performance with and without GPU acceleration.
 """
 
-import time
 import sys
+import time
 from pathlib import Path
-from sear.core import index_file, search, delete_corpus, is_gpu_available
+
+from sear.core import delete_corpus, index_file, is_gpu_available, search
+
 
 def create_test_data():
     """Create a test text file with some content."""
@@ -25,6 +27,7 @@ def create_test_data():
     test_file.write_text("\n".join(content))
     return str(test_file)
 
+
 def cleanup_test_data():
     """Remove test files and corpus."""
     test_file = Path("test_data.txt")
@@ -33,18 +36,19 @@ def cleanup_test_data():
 
     try:
         delete_corpus("test_corpus_cpu")
-    except:
+    except Exception:
         pass
 
     try:
         delete_corpus("test_corpus_gpu")
-    except:
+    except Exception:
         pass
 
+
 def main():
-    print("="*80)
+    print("=" * 80)
     print("SEAR PERFORMANCE TEST")
-    print("="*80)
+    print("=" * 80)
 
     # Check GPU availability
     gpu_available = is_gpu_available()
@@ -60,9 +64,9 @@ def main():
     print(f"✓ Created test file: {test_file}")
 
     # Test CPU indexing
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("TEST 1: CPU INDEXING")
-    print("="*80)
+    print("=" * 80)
 
     start_time = time.time()
     try:
@@ -76,9 +80,9 @@ def main():
         return 1
 
     # Test CPU search
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("TEST 2: CPU SEARCH")
-    print("="*80)
+    print("=" * 80)
 
     query = "testing methodologies"
     start_time = time.time()
@@ -94,9 +98,9 @@ def main():
 
     # Test GPU if available
     if gpu_available:
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
         print("TEST 3: GPU INDEXING")
-        print("="*80)
+        print("=" * 80)
 
         start_time = time.time()
         try:
@@ -110,9 +114,9 @@ def main():
             cleanup_test_data()
             return 1
 
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
         print("TEST 4: GPU SEARCH")
-        print("="*80)
+        print("=" * 80)
 
         start_time = time.time()
         try:
@@ -127,19 +131,23 @@ def main():
             return 1
 
     # Summary
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("PERFORMANCE SUMMARY")
-    print("="*80)
+    print("=" * 80)
     print(f"CPU Indexing:  {cpu_index_time:.2f}s")
     print(f"CPU Search:    {cpu_search_time:.2f}s")
 
     if gpu_available:
-        print(f"GPU Indexing:  {gpu_index_time:.2f}s ({cpu_index_time/gpu_index_time:.2f}x speedup)")
-        print(f"GPU Search:    {gpu_search_time:.2f}s ({cpu_search_time/gpu_search_time:.2f}x speedup)")
+        print(
+            f"GPU Indexing:  {gpu_index_time:.2f}s ({cpu_index_time/gpu_index_time:.2f}x speedup)"
+        )
+        print(
+            f"GPU Search:    {gpu_search_time:.2f}s ({cpu_search_time/gpu_search_time:.2f}x speedup)"
+        )
     else:
         print("\nGPU tests skipped (GPU not available)")
 
-    print("="*80)
+    print("=" * 80)
 
     # Cleanup
     print("\nCleaning up test data...")
@@ -147,6 +155,7 @@ def main():
     print("✓ Cleanup complete")
 
     return 0
+
 
 if __name__ == "__main__":
     sys.exit(main())

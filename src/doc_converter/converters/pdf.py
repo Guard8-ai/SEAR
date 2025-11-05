@@ -4,20 +4,21 @@ PDF Converter
 Handles PDF to text conversion with OCR fallback
 """
 
-import pdfplumber
-from pdf2image import convert_from_path
-import pytesseract
-from typing import Tuple, Dict, Any, Optional
+from typing import Any, Optional
 
-from .base import BaseConverter
+import pdfplumber
+import pytesseract
+from pdf2image import convert_from_path
+
 from ..core import (
-    normalize_text_for_llm,
-    detect_language,
-    get_ocr_lang_code,
     apply_bidi_algorithm,
+    create_page_separator,
+    detect_language,
     generate_metadata,
-    create_page_separator
+    get_ocr_lang_code,
+    normalize_text_for_llm,
 )
+from .base import BaseConverter
 
 
 class PDFConverter(BaseConverter):
@@ -25,7 +26,7 @@ class PDFConverter(BaseConverter):
     PDF document converter with smart text extraction and OCR fallback
     """
 
-    supported_extensions = ['.pdf']
+    supported_extensions = [".pdf"]
 
     def __init__(
         self,
@@ -33,7 +34,7 @@ class PDFConverter(BaseConverter):
         normalize: bool = True,
         force_ocr: bool = False,
         dpi: int = 300,
-        lang: Optional[str] = None
+        lang: Optional[str] = None,
     ):
         """
         Initialize PDF converter
@@ -50,7 +51,7 @@ class PDFConverter(BaseConverter):
         self.dpi = dpi
         self.lang = lang
 
-    def _check_has_text_layer(self, pdf) -> Tuple[bool, int]:
+    def _check_has_text_layer(self, pdf) -> tuple[bool, int]:
         """
         Check if PDF has a text layer by counting characters
 
@@ -63,7 +64,7 @@ class PDFConverter(BaseConverter):
 
         return total_chars > 0, total_chars
 
-    def _extract_text_fast(self, pdf) -> Tuple[str, int]:
+    def _extract_text_fast(self, pdf) -> tuple[str, int]:
         """
         Fast text extraction using pdfplumber
 
@@ -73,7 +74,7 @@ class PDFConverter(BaseConverter):
         all_text = ""
         total_pages = len(pdf.pages)
 
-        print(f"Using fast text extraction (PDF has text layer)")
+        print("Using fast text extraction (PDF has text layer)")
         print(f"Total pages: {total_pages}")
 
         for page_num, page in enumerate(pdf.pages, 1):
@@ -96,14 +97,14 @@ class PDFConverter(BaseConverter):
 
         return all_text, total_pages
 
-    def _extract_text_ocr(self, pdf_path: str) -> Tuple[str, int, str]:
+    def _extract_text_ocr(self, pdf_path: str) -> tuple[str, int, str]:
         """
         OCR-based text extraction using Tesseract
 
         Returns:
             Tuple of (extracted_text, page_count, detected_language)
         """
-        print(f"Using OCR extraction (no text layer or forced OCR)")
+        print("Using OCR extraction (no text layer or forced OCR)")
         print(f"Converting PDF to images at {self.dpi} DPI...")
 
         # Convert PDF to images
@@ -123,7 +124,7 @@ class PDFConverter(BaseConverter):
             ocr_lang = self.lang
             if page_num == 1 and not self.lang:
                 # Quick OCR for language detection
-                sample = pytesseract.image_to_string(image, lang='heb+eng')
+                sample = pytesseract.image_to_string(image, lang="heb+eng")
                 _, detected = detect_language(sample)
                 ocr_lang = get_ocr_lang_code(detected)
                 print(f"  Detected languages: {detected}, using OCR lang: {ocr_lang}")
@@ -131,8 +132,8 @@ class PDFConverter(BaseConverter):
             # Run OCR
             text = pytesseract.image_to_string(
                 image,
-                lang=ocr_lang or 'eng',
-                config='--psm 1'  # Automatic page segmentation with OSD
+                lang=ocr_lang or "eng",
+                config="--psm 1",  # Automatic page segmentation with OSD
             )
 
             if text and text.strip():
@@ -157,7 +158,7 @@ class PDFConverter(BaseConverter):
 
         return all_text, total_pages, primary_lang
 
-    def extract(self, file_path: str, **kwargs) -> Tuple[str, Dict[str, Any]]:
+    def extract(self, file_path: str, **kwargs) -> tuple[str, dict[str, Any]]:
         """
         Extract text and metadata from PDF
 
@@ -174,7 +175,7 @@ class PDFConverter(BaseConverter):
         with pdfplumber.open(file_path) as pdf:
             has_text, char_count = self._check_has_text_layer(pdf)
 
-            print(f"PDF Analysis:")
+            print("PDF Analysis:")
             print(f"  Pages: {len(pdf.pages)}")
             print(f"  Has text layer: {has_text} (char count: {char_count:,})")
             print(f"  Force OCR: {self.force_ocr}")
@@ -201,7 +202,7 @@ class PDFConverter(BaseConverter):
             language=primary_lang,
             detected_languages=detected_langs,
             method=method,
-            characters=len(all_text)
+            characters=len(all_text),
         )
 
         return all_text, metadata

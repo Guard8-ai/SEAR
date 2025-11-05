@@ -6,7 +6,7 @@ Handles creation and formatting of document metadata
 
 import os
 from datetime import datetime
-from typing import Dict, Any
+from typing import Any
 
 
 def generate_metadata(
@@ -16,8 +16,8 @@ def generate_metadata(
     detected_languages: list,
     method: str,
     characters: int,
-    **kwargs
-) -> Dict[str, Any]:
+    **kwargs,
+) -> dict[str, Any]:
     """
     Generate metadata dictionary for converted documents
 
@@ -40,7 +40,7 @@ def generate_metadata(
         "detected_languages": detected_languages,
         "converted": datetime.now().isoformat(),
         "method": method,
-        "characters": characters
+        "characters": characters,
     }
 
     # Add any additional metadata
@@ -49,7 +49,7 @@ def generate_metadata(
     return metadata
 
 
-def format_metadata_header(metadata: Dict[str, Any]) -> str:
+def format_metadata_header(metadata: dict[str, Any]) -> str:
     """
     Format metadata as YAML front matter for markdown files
 
@@ -69,4 +69,4 @@ def format_metadata_header(metadata: Dict[str, Any]) -> str:
 
     lines.append("---\n")
 
-    return '\n'.join(lines)
+    return "\n".join(lines)

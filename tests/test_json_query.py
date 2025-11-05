@@ -12,18 +12,15 @@ Tests the execute_query() function with various query formats:
 """
 
 import sys
+
 import pytest
-from sear.core import execute_query, _retrieve_chunks_only
+
+from sear.core import execute_query
 
 
 def create_mock_result(corpus, location, score, chunk_text):
     """Helper to create mock chunk results."""
-    return {
-        'corpus': corpus,
-        'location': location,
-        'score': score,
-        'chunk': chunk_text
-    }
+    return {"corpus": corpus, "location": location, "score": score, "chunk": chunk_text}
 
 
 # =============================================================================
@@ -38,39 +35,47 @@ def setup_mock_results():
     """Set up mock query results for testing."""
     # "security" query results
     MOCK_RESULTS["security"] = [
-        create_mock_result('docs', 'security.md:1-50', 0.85, 'Security best practices'),
-        create_mock_result('docs', 'security.md:51-100', 0.80, 'Authentication methods'),
-        create_mock_result('backend', 'auth.py:1-30', 0.75, 'Security implementation'),
+        create_mock_result("docs", "security.md:1-50", 0.85, "Security best practices"),
+        create_mock_result("docs", "security.md:51-100", 0.80, "Authentication methods"),
+        create_mock_result("backend", "auth.py:1-30", 0.75, "Security implementation"),
     ]
 
     # "authentication" query results
     MOCK_RESULTS["authentication"] = [
-        create_mock_result('docs', 'security.md:51-100', 0.88, 'Authentication methods'),  # Overlaps with security
-        create_mock_result('backend', 'auth.py:1-30', 0.82, 'Security implementation'),  # Overlaps with security
-        create_mock_result('backend', 'login.py:1-40', 0.76, 'Login handlers'),
+        create_mock_result(
+            "docs", "security.md:51-100", 0.88, "Authentication methods"
+        ),  # Overlaps with security
+        create_mock_result(
+            "backend", "auth.py:1-30", 0.82, "Security implementation"
+        ),  # Overlaps with security
+        create_mock_result("backend", "login.py:1-40", 0.76, "Login handlers"),
     ]
 
     # "deprecated" query results
     MOCK_RESULTS["deprecated"] = [
-        create_mock_result('backend', 'legacy.py:1-50', 0.70, 'Old deprecated code'),
-        create_mock_result('docs', 'old_docs.md:1-100', 0.65, 'Deprecated features'),
+        create_mock_result("backend", "legacy.py:1-50", 0.70, "Old deprecated code"),
+        create_mock_result("docs", "old_docs.md:1-100", 0.65, "Deprecated features"),
     ]
 
     # "testing" query results
     MOCK_RESULTS["testing"] = [
-        create_mock_result('tests', 'test_auth.py:1-50', 0.90, 'Authentication tests'),
-        create_mock_result('tests', 'test_api.py:1-50', 0.85, 'API endpoint tests'),
+        create_mock_result("tests", "test_auth.py:1-50", 0.90, "Authentication tests"),
+        create_mock_result("tests", "test_api.py:1-50", 0.85, "API endpoint tests"),
     ]
 
     # "API" query results
     MOCK_RESULTS["api"] = [
-        create_mock_result('backend', 'api.py:1-100', 0.92, 'API endpoints'),
-        create_mock_result('backend', 'api.py:101-200', 0.87, 'API handlers'),
-        create_mock_result('tests', 'test_api.py:1-50', 0.83, 'API endpoint tests'),  # Overlaps with testing
+        create_mock_result("backend", "api.py:1-100", 0.92, "API endpoints"),
+        create_mock_result("backend", "api.py:101-200", 0.87, "API handlers"),
+        create_mock_result(
+            "tests", "test_api.py:1-50", 0.83, "API endpoint tests"
+        ),  # Overlaps with testing
     ]
 
 
-def mock_retrieve_chunks_only(query, corpuses=None, min_score=0.3, max_results=None, use_gpu=None, verbose=False):
+def mock_retrieve_chunks_only(
+    query, corpuses=None, min_score=0.3, max_results=None, use_gpu=None, verbose=False
+):
     """
     Mock version of _retrieve_chunks_only for testing.
     Returns pre-defined results based on query string.
@@ -82,7 +87,7 @@ def mock_retrieve_chunks_only(query, corpuses=None, min_score=0.3, max_results=N
     results = MOCK_RESULTS.get(query_key, [])
 
     # Filter by min_score
-    results = [r for r in results if r['score'] >= min_score]
+    results = [r for r in results if r["score"] >= min_score]
 
     # Limit results if requested
     if max_results is not None:
@@ -97,29 +102,26 @@ def mock_retrieve_function(monkeypatch):
     """Set up mock data and patch the retrieve function for all tests."""
     setup_mock_results()
     import sear.core as sear_core
-    monkeypatch.setattr(sear_core, '_retrieve_chunks_only', mock_retrieve_chunks_only)
+
+    monkeypatch.setattr(sear_core, "_retrieve_chunks_only", mock_retrieve_chunks_only)
 
 
 # =============================================================================
 # Test Functions
 # =============================================================================
 
+
 def test_simple_query():
     """Test simple query (no boolean operation)."""
     print("\n=== Testing Simple Query ===")
 
-    query = {
-        "query": "security",
-        "min_score": 0.3,
-        "sort": False,
-        "merge_adjacent": False
-    }
+    query = {"query": "security", "min_score": 0.3, "sort": False, "merge_adjacent": False}
 
     results = execute_query(query, verbose=False)
 
     assert len(results) == 3, f"Expected 3 results, got {len(results)}"
-    assert results[0]['location'] == 'security.md:1-50'
-    assert results[0]['score'] == 0.85
+    assert results[0]["location"] == "security.md:1-50"
+    assert results[0]["score"] == 0.85
     print("✓ Simple query works correctly")
 
 
@@ -131,7 +133,7 @@ def test_union_basic():
         "operation": "union",
         "queries": ["security", "authentication"],
         "sort": False,
-        "merge_adjacent": False
+        "merge_adjacent": False,
     }
 
     results = execute_query(query, verbose=False)
@@ -153,17 +155,17 @@ def test_union_score_preservation():
         "operation": "union",
         "queries": ["security", "authentication"],
         "sort": False,
-        "merge_adjacent": False
+        "merge_adjacent": False,
     }
 
     results = execute_query(query, verbose=False)
 
     # Find the overlapping chunk (security.md:51-100)
-    chunk = next((r for r in results if r['location'] == 'security.md:51-100'), None)
+    chunk = next((r for r in results if r["location"] == "security.md:51-100"), None)
     assert chunk is not None, "Overlapping chunk not found in union results"
 
     # Should have higher score from authentication query (0.88 > 0.80)
-    assert chunk['score'] == 0.88, f"Expected score 0.88, got {chunk['score']}"
+    assert chunk["score"] == 0.88, f"Expected score 0.88, got {chunk['score']}"
     print("✓ Union preserves highest score for duplicates")
 
 
@@ -175,7 +177,7 @@ def test_intersect_basic():
         "operation": "intersect",
         "queries": ["security", "authentication"],
         "sort": False,
-        "merge_adjacent": False
+        "merge_adjacent": False,
     }
 
     results = execute_query(query, verbose=False)
@@ -184,9 +186,9 @@ def test_intersect_basic():
     # Overlapping: security.md:51-100, auth.py:1-30
     assert len(results) == 2, f"Expected 2 results (intersection), got {len(results)}"
 
-    locations = {r['location'] for r in results}
-    assert 'security.md:51-100' in locations
-    assert 'auth.py:1-30' in locations
+    locations = {r["location"] for r in results}
+    assert "security.md:51-100" in locations
+    assert "auth.py:1-30" in locations
     print("✓ Intersect returns only overlapping chunks")
 
 
@@ -199,7 +201,7 @@ def test_difference_basic():
         "query": "security",
         "exclude": "authentication",
         "sort": False,
-        "merge_adjacent": False
+        "merge_adjacent": False,
     }
 
     results = execute_query(query, verbose=False)
@@ -207,7 +209,7 @@ def test_difference_basic():
     # security has 3 chunks, authentication overlaps with 2
     # Result: 3 - 2 = 1 chunk (security.md:1-50)
     assert len(results) == 1, f"Expected 1 result (difference), got {len(results)}"
-    assert results[0]['location'] == 'security.md:1-50'
+    assert results[0]["location"] == "security.md:1-50"
     print("✓ Difference excludes overlapping chunks")
 
 
@@ -217,15 +219,10 @@ def test_nested_union_difference():
 
     query = {
         "operation": "difference",
-        "left": {
-            "operation": "union",
-            "queries": ["security", "authentication"]
-        },
-        "right": {
-            "query": "deprecated"
-        },
+        "left": {"operation": "union", "queries": ["security", "authentication"]},
+        "right": {"query": "deprecated"},
         "sort": False,
-        "merge_adjacent": False
+        "merge_adjacent": False,
     }
 
     results = execute_query(query, verbose=False)
@@ -236,9 +233,9 @@ def test_nested_union_difference():
     assert len(results) == 4, f"Expected 4 results, got {len(results)}"
 
     # Verify none of the deprecated chunks are in results
-    locations = {r['location'] for r in results}
-    assert 'legacy.py:1-50' not in locations
-    assert 'old_docs.md:1-100' not in locations
+    locations = {r["location"] for r in results}
+    assert "legacy.py:1-50" not in locations
+    assert "old_docs.md:1-100" not in locations
     print("✓ Nested query (A ∪ B) - C works correctly")
 
 
@@ -257,7 +254,7 @@ def test_complex_nested_query():
         "operation": "intersect",
         "queries": ["testing", "api"],
         "sort": False,
-        "merge_adjacent": False
+        "merge_adjacent": False,
     }
 
     results = execute_query(query, verbose=False)
@@ -266,7 +263,7 @@ def test_complex_nested_query():
     # api: api.py:1-100, api.py:101-200, test_api.py
     # Overlap: test_api.py
     assert len(results) == 1, f"Expected 1 result (test_api.py overlap), got {len(results)}"
-    assert results[0]['location'] == 'test_api.py:1-50'
+    assert results[0]["location"] == "test_api.py:1-50"
     print("✓ Complex nested query works correctly")
 
 
@@ -278,7 +275,7 @@ def test_sort_and_merge():
         "operation": "union",
         "queries": ["security", "authentication"],
         "sort": True,
-        "merge_adjacent": True
+        "merge_adjacent": True,
     }
 
     results = execute_query(query, verbose=False)
@@ -297,12 +294,7 @@ def test_min_score_filtering():
     print("\n=== Testing Min Score Filtering ===")
 
     # Use higher threshold to filter out lower-scoring results
-    query1 = {
-        "query": "security",
-        "min_score": 0.3,
-        "sort": False,
-        "merge_adjacent": False
-    }
+    query1 = {"query": "security", "min_score": 0.3, "sort": False, "merge_adjacent": False}
 
     results1 = execute_query(query1, verbose=False)
     count1 = len(results1)
@@ -311,13 +303,15 @@ def test_min_score_filtering():
         "query": "security",
         "min_score": 0.8,  # Higher threshold
         "sort": False,
-        "merge_adjacent": False
+        "merge_adjacent": False,
     }
 
     results2 = execute_query(query2, verbose=False)
     count2 = len(results2)
 
-    assert count2 < count1, f"Higher min_score should return fewer results (got {count2} vs {count1})"
+    assert (
+        count2 < count1
+    ), f"Higher min_score should return fewer results (got {count2} vs {count1})"
     print(f"✓ Min score filtering works (0.3: {count1} chunks, 0.8: {count2} chunks)")
 
 
@@ -328,7 +322,7 @@ def test_validation_errors():
     # Test 1: Not a dictionary
     try:
         execute_query("not a dict", verbose=False)
-        assert False, "Should have raised ValueError for non-dict input"
+        raise AssertionError("Should have raised ValueError for non-dict input")
     except ValueError as e:
         assert "must be a dictionary" in str(e)
         print("✓ Rejects non-dictionary input")
@@ -336,7 +330,7 @@ def test_validation_errors():
     # Test 2: Missing required fields
     try:
         execute_query({}, verbose=False)
-        assert False, "Should have raised ValueError for empty query"
+        raise AssertionError("Should have raised ValueError for empty query")
     except ValueError as e:
         assert "operation" in str(e) or "query" in str(e)
         print("✓ Rejects query without 'operation' or 'query' field")
@@ -344,7 +338,7 @@ def test_validation_errors():
     # Test 3: Unknown operation
     try:
         execute_query({"operation": "invalid_op", "queries": ["a", "b"]}, verbose=False)
-        assert False, "Should have raised ValueError for unknown operation"
+        raise AssertionError("Should have raised ValueError for unknown operation")
     except ValueError as e:
         assert "Unknown operation" in str(e)
         print("✓ Rejects unknown operations")
@@ -352,7 +346,7 @@ def test_validation_errors():
     # Test 4: Union without queries
     try:
         execute_query({"operation": "union"}, verbose=False)
-        assert False, "Should have raised ValueError for union without queries"
+        raise AssertionError("Should have raised ValueError for union without queries")
     except ValueError as e:
         assert "queries" in str(e).lower()
         print("✓ Rejects union without 'queries' field")
@@ -360,7 +354,7 @@ def test_validation_errors():
     # Test 5: Union with insufficient queries
     try:
         execute_query({"operation": "union", "queries": ["only_one"]}, verbose=False)
-        assert False, "Should have raised ValueError for union with <2 queries"
+        raise AssertionError("Should have raised ValueError for union with <2 queries")
     except ValueError as e:
         assert "at least 2" in str(e).lower()
         print("✓ Rejects union with <2 queries")
@@ -368,7 +362,7 @@ def test_validation_errors():
     # Test 6: Difference without required fields
     try:
         execute_query({"operation": "difference", "query": "test"}, verbose=False)
-        assert False, "Should have raised ValueError for incomplete difference"
+        raise AssertionError("Should have raised ValueError for incomplete difference")
     except ValueError as e:
         assert "left" in str(e).lower() or "exclude" in str(e).lower()
         print("✓ Rejects difference without both operands")
@@ -382,7 +376,7 @@ def test_verbose_output():
         "operation": "union",
         "queries": ["security", "authentication"],
         "sort": True,
-        "merge_adjacent": True
+        "merge_adjacent": True,
     }
 
     # This should print detailed execution trace
@@ -398,6 +392,7 @@ def test_verbose_output():
 # Main Test Runner
 # =============================================================================
 
+
 def main():
     """Run all tests (for standalone execution - pytest is preferred)."""
     print("=" * 80)
@@ -411,6 +406,7 @@ def main():
 
     # Monkey-patch for standalone execution
     import sear.core as sear_core
+
     original_retrieve = sear_core._retrieve_chunks_only
     sear_core._retrieve_chunks_only = mock_retrieve_chunks_only
 
@@ -455,10 +451,11 @@ def main():
     except Exception as e:
         print(f"\n❌ UNEXPECTED ERROR: {e}")
         import traceback
+
         traceback.print_exc()
         sear_core._retrieve_chunks_only = original_retrieve
         return 1
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

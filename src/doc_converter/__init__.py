@@ -12,35 +12,28 @@ Supports:
 __version__ = "1.0.0"
 
 from .converters import (
+    DOCX_AVAILABLE,
     BaseConverter,
-    PDFConverter,
     DOCXConverter,
+    PDFConverter,
     get_converter_for_file,
-    DOCX_AVAILABLE
 )
-
-from .core import (
-    normalize_text_for_llm,
-    detect_language,
-    apply_bidi_algorithm
-)
+from .core import apply_bidi_algorithm, detect_language, normalize_text_for_llm
 
 __all__ = [
     # Converters
-    'BaseConverter',
-    'PDFConverter',
-    'DOCXConverter',
-    'get_converter_for_file',
-    'convert_document',
-    'DOCX_AVAILABLE',
-
+    "BaseConverter",
+    "PDFConverter",
+    "DOCXConverter",
+    "get_converter_for_file",
+    "convert_document",
+    "DOCX_AVAILABLE",
     # Utilities
-    'normalize_text_for_llm',
-    'detect_language',
-    'apply_bidi_algorithm',
-
+    "normalize_text_for_llm",
+    "detect_language",
+    "apply_bidi_algorithm",
     # Version
-    '__version__',
+    "__version__",
 ]
 
 
@@ -52,7 +45,7 @@ def convert_document(
     dpi: int = 300,
     apply_bidi: bool = True,
     normalize: bool = True,
-    **kwargs
+    **kwargs,
 ):
     """
     Convert a document to markdown (convenience function)
@@ -97,18 +90,11 @@ def convert_document(
         ...     print(f"Converted {meta['pages']} pages in {time:.2f}s")
     """
     # Build converter kwargs
-    converter_kwargs = {
-        'apply_bidi': apply_bidi,
-        'normalize': normalize
-    }
+    converter_kwargs = {"apply_bidi": apply_bidi, "normalize": normalize}
 
     # Add PDF-specific options if it's a PDF
-    if file_path.lower().endswith('.pdf'):
-        converter_kwargs.update({
-            'force_ocr': force_ocr,
-            'dpi': dpi,
-            'lang': lang
-        })
+    if file_path.lower().endswith(".pdf"):
+        converter_kwargs.update({"force_ocr": force_ocr, "dpi": dpi, "lang": lang})
 
     # Add any additional kwargs
     converter_kwargs.update(kwargs)

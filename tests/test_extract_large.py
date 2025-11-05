@@ -6,11 +6,12 @@ Tests extraction on a realistic large corpus with wide-ranging queries
 that will match many chunks (50+ chunks expected).
 """
 
+import shutil
 import sys
 import tempfile
-import shutil
 from pathlib import Path
-from sear.core import index_file, extract_relevant_content, delete_corpus
+
+from sear.core import delete_corpus, extract_relevant_content, index_file
 
 
 def create_large_gitingest_corpus(tmpdir):
@@ -584,9 +585,9 @@ def test_large_corpus_extraction():
     """
     Test extraction on large corpus with wide query matching many chunks.
     """
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("LARGE CORPUS EXTRACTION TEST")
-    print("="*80)
+    print("=" * 80)
     print("\nCreating large gitingest-style corpus...")
 
     tmpdir = tempfile.mkdtemp()
@@ -602,27 +603,28 @@ def test_large_corpus_extraction():
         print(f"✅ Indexed {chunk_count} chunks")
 
         # Test 1: Wide query that should match many chunks
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
         print("TEST 1: Wide query - authentication security testing validation")
-        print("="*80)
+        print("=" * 80)
 
         result1 = extract_relevant_content(
             query="authentication security testing validation neural network transformer",
             corpuses=[corpus_name],
             output_file=str(output_file),
             min_score=0.25,  # Lower threshold to get more results
-            verbose=True
+            verbose=True,
         )
 
-        print(f"\n📊 RESULTS:")
+        print("\n📊 RESULTS:")
         print(f"   Total chunks extracted: {result1['total_chunks']}")
         print(f"   Score range: {result1['score_range'][0]:.3f} - {result1['score_range'][1]:.3f}")
         print(f"   Output file size: {output_file.stat().st_size:,} bytes")
         print(f"   Sources: {len(result1['sources'])}")
 
         # Validate results
-        assert result1['total_chunks'] >= 10, \
-            f"Should extract at least 10 chunks, got {result1['total_chunks']}"
+        assert (
+            result1["total_chunks"] >= 10
+        ), f"Should extract at least 10 chunks, got {result1['total_chunks']}"
         assert output_file.exists(), "Output file should be created"
 
         # Check output content
@@ -635,9 +637,9 @@ def test_large_corpus_extraction():
         print(f"✅ PASSED: Extracted {result1['total_chunks']} chunks successfully")
 
         # Test 2: Specific query with higher threshold
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
         print("TEST 2: Specific query - OAuth Google authentication")
-        print("="*80)
+        print("=" * 80)
 
         output_file2 = Path(tmpdir) / "specific_extraction.txt"
         result2 = extract_relevant_content(
@@ -645,25 +647,29 @@ def test_large_corpus_extraction():
             corpuses=[corpus_name],
             output_file=str(output_file2),
             min_score=0.35,
-            verbose=True
+            verbose=True,
         )
 
-        print(f"\n📊 RESULTS:")
+        print("\n📊 RESULTS:")
         print(f"   Total chunks extracted: {result2['total_chunks']}")
-        print(f"   Score range: {result2['score_range'][0]:.3f} - {result2['score_range'][1]:.3f}" if result2['total_chunks'] > 0 else "   No chunks found")
+        print(
+            f"   Score range: {result2['score_range'][0]:.3f} - {result2['score_range'][1]:.3f}"
+            if result2["total_chunks"] > 0
+            else "   No chunks found"
+        )
 
         # Validate
-        assert result2['total_chunks'] >= 1, "Should find at least one OAuth-related chunk"
+        assert result2["total_chunks"] >= 1, "Should find at least one OAuth-related chunk"
 
         content2 = output_file2.read_text()
         assert "OAuth" in content2 or "oauth" in content2, "Should contain OAuth content"
 
-        print(f"✅ PASSED: Specific query worked correctly")
+        print("✅ PASSED: Specific query worked correctly")
 
         # Test 3: Max chunks limit on large result set
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
         print("TEST 3: Max chunks limit - limit to 15 chunks")
-        print("="*80)
+        print("=" * 80)
 
         output_file3 = Path(tmpdir) / "limited_extraction.txt"
         result3 = extract_relevant_content(
@@ -672,25 +678,27 @@ def test_large_corpus_extraction():
             output_file=str(output_file3),
             min_score=0.2,
             max_chunks=15,
-            verbose=True
+            verbose=True,
         )
 
-        print(f"\n📊 RESULTS:")
+        print("\n📊 RESULTS:")
         print(f"   Total chunks extracted: {result3['total_chunks']}")
-        print(f"   Max chunks requested: 15")
+        print("   Max chunks requested: 15")
 
         # Validate
-        assert result3['total_chunks'] <= 15, \
-            f"Should not exceed 15 chunks, got {result3['total_chunks']}"
+        assert (
+            result3["total_chunks"] <= 15
+        ), f"Should not exceed 15 chunks, got {result3['total_chunks']}"
 
-        print(f"✅ PASSED: Max chunks limit respected")
+        print("✅ PASSED: Max chunks limit respected")
 
         # Test 4: Performance check
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
         print("TEST 4: Performance - extract all relevant chunks")
-        print("="*80)
+        print("=" * 80)
 
         import time
+
         output_file4 = Path(tmpdir) / "performance_extraction.txt"
 
         start_time = time.time()
@@ -699,32 +707,34 @@ def test_large_corpus_extraction():
             corpuses=[corpus_name],
             output_file=str(output_file4),
             min_score=0.2,
-            verbose=True
+            verbose=True,
         )
         elapsed = time.time() - start_time
 
-        print(f"\n📊 PERFORMANCE:")
+        print("\n📊 PERFORMANCE:")
         print(f"   Total chunks: {result4['total_chunks']}")
         print(f"   Time elapsed: {elapsed:.2f} seconds")
         print(f"   Chunks per second: {result4['total_chunks'] / elapsed:.1f}")
 
         # Performance should be reasonable (< 10 seconds for < 100 chunks)
-        if result4['total_chunks'] < 100:
-            assert elapsed < 10, f"Performance too slow: {elapsed:.2f}s for {result4['total_chunks']} chunks"
+        if result4["total_chunks"] < 100:
+            assert (
+                elapsed < 10
+            ), f"Performance too slow: {elapsed:.2f}s for {result4['total_chunks']} chunks"
 
-        print(f"✅ PASSED: Performance acceptable")
+        print("✅ PASSED: Performance acceptable")
 
         # Summary
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
         print("LARGE CORPUS TEST SUMMARY")
-        print("="*80)
-        print(f"✅ All large corpus tests passed!")
+        print("=" * 80)
+        print("✅ All large corpus tests passed!")
         print(f"   Corpus size: {chunk_count} chunks")
         print(f"   Wide query extracted: {result1['total_chunks']} chunks")
         print(f"   Specific query extracted: {result2['total_chunks']} chunks")
         print(f"   Limited extraction: {result3['total_chunks']} chunks (max: 15)")
         print(f"   Performance test: {result4['total_chunks']} chunks in {elapsed:.2f}s")
-        print("="*80)
+        print("=" * 80)
 
         # Cleanup
         delete_corpus(corpus_name)
@@ -732,6 +742,7 @@ def test_large_corpus_extraction():
     except Exception as e:
         print(f"\n❌ ERROR: {e}")
         import traceback
+
         traceback.print_exc()
         raise
 

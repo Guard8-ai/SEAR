@@ -4,10 +4,11 @@ DOCX (Word Document) Converter
 Handles Microsoft Word .docx files
 """
 
-from typing import Tuple, Dict, Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 try:
     from docx import Document
+
     DOCX_AVAILABLE = True
 except ImportError:
     DOCX_AVAILABLE = False
@@ -18,14 +19,13 @@ if TYPE_CHECKING:
     from docx.table import Table
     from docx.text.paragraph import Paragraph
 
-from .base import BaseConverter
 from ..core import (
-    normalize_text_for_llm,
-    detect_language,
     apply_bidi_algorithm,
+    detect_language,
     generate_metadata,
-    create_page_separator
+    normalize_text_for_llm,
 )
+from .base import BaseConverter
 
 
 class DOCXConverter(BaseConverter):
@@ -33,7 +33,7 @@ class DOCXConverter(BaseConverter):
     DOCX (Microsoft Word) document converter
     """
 
-    supported_extensions = ['.docx']
+    supported_extensions = [".docx"]
 
     def __init__(self, apply_bidi: bool = False, normalize: bool = True):
         """
@@ -89,11 +89,15 @@ class DOCXConverter(BaseConverter):
             header = rows_text[0]
             separator = " | ".join(["---"] * len(table.rows[0].cells))
             body = rows_text[1:]
-            return f"\n| {header} |\n| {separator} |\n" + "\n".join(f"| {row} |" for row in body) + "\n"
+            return (
+                f"\n| {header} |\n| {separator} |\n"
+                + "\n".join(f"| {row} |" for row in body)
+                + "\n"
+            )
         else:
             return "\n| " + rows_text[0] + " |\n"
 
-    def _extract_document_structure(self, doc: "Document") -> Tuple[str, int]:
+    def _extract_document_structure(self, doc: "Document") -> tuple[str, int]:
         """
         Extract text from document preserving structure
 
@@ -107,20 +111,24 @@ class DOCXConverter(BaseConverter):
         section_count = 0
         paragraph_count = 0
 
-        print(f"Extracting text from DOCX document...")
+        print("Extracting text from DOCX document...")
 
         # Iterate through document elements
         for element in doc.element.body:
             # Handle paragraphs
-            if element.tag.endswith('p'):
+            if element.tag.endswith("p"):
                 paragraph = doc.paragraphs[paragraph_count]
                 text = self._extract_paragraph_text(paragraph)
 
                 if text and text.strip():
                     # Check if it's a heading based on style
-                    if paragraph.style and paragraph.style.name and paragraph.style.name.startswith('Heading'):
+                    if (
+                        paragraph.style
+                        and paragraph.style.name
+                        and paragraph.style.name.startswith("Heading")
+                    ):
                         # Extract heading level
-                        level = paragraph.style.name.replace('Heading ', '').strip()
+                        level = paragraph.style.name.replace("Heading ", "").strip()
                         if level.isdigit():
                             all_text += f"\n{'#' * int(level)} {text}\n\n"
                         else:
@@ -133,7 +141,7 @@ class DOCXConverter(BaseConverter):
                 paragraph_count += 1
 
             # Handle tables
-            elif element.tag.endswith('tbl'):
+            elif element.tag.endswith("tbl"):
                 # Find the corresponding table
                 for table in doc.tables:
                     table_text = self._extract_table_text(table)
@@ -147,7 +155,7 @@ class DOCXConverter(BaseConverter):
 
         return all_text, max(1, section_count)
 
-    def extract(self, file_path: str, **kwargs) -> Tuple[str, Dict[str, Any]]:
+    def extract(self, file_path: str, **kwargs) -> tuple[str, dict[str, Any]]:
         """
         Extract text and metadata from DOCX file
 
@@ -189,7 +197,7 @@ class DOCXConverter(BaseConverter):
             method="docx_extraction",
             characters=len(all_text),
             tables=len(doc.tables),
-            paragraphs=len(doc.paragraphs)
+            paragraphs=len(doc.paragraphs),
         )
 
         return all_text, metadata

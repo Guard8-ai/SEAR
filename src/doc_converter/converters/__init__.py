@@ -8,16 +8,17 @@ from .pdf import PDFConverter
 # Optional converters (may not be available if dependencies not installed)
 try:
     from .docx import DOCXConverter
+
     DOCX_AVAILABLE = True
 except ImportError:
     DOCX_AVAILABLE = False
     DOCXConverter = None
 
 __all__ = [
-    'BaseConverter',
-    'PDFConverter',
-    'DOCXConverter',
-    'DOCX_AVAILABLE',
+    "BaseConverter",
+    "PDFConverter",
+    "DOCXConverter",
+    "DOCX_AVAILABLE",
 ]
 
 

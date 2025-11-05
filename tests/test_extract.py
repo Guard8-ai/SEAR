@@ -6,18 +6,16 @@ Tests the extract_relevant_content() function and reconstruct_text_from_chunks()
 """
 
 import os
+import shutil
 import sys
 import tempfile
-import shutil
 from pathlib import Path
 
 # Import SEAR core functions
 from sear.core import (
-    index_file,
-    extract_relevant_content,
-    reconstruct_text_from_chunks,
     delete_corpus,
-    list_corpuses
+    extract_relevant_content,
+    index_file,
 )
 
 
@@ -133,9 +131,9 @@ def test_1_extract_with_default_threshold():
     """
     Test 1: Extract with default threshold (0.3).
     """
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("TEST 1: Extract with default threshold (0.3)")
-    print("="*80)
+    print("=" * 80)
 
     tmpdir = tempfile.mkdtemp()
     output_file = Path(tmpdir) / "test_output_1.txt"
@@ -149,12 +147,12 @@ def test_1_extract_with_default_threshold():
             corpuses=[corpus_name],
             output_file=str(output_file),
             min_score=0.3,
-            verbose=True
+            verbose=True,
         )
 
         # Validate results
-        assert result['total_chunks'] > 0, "Should find at least one chunk"
-        assert result['output_file'] == str(output_file.absolute()), "Output file path should match"
+        assert result["total_chunks"] > 0, "Should find at least one chunk"
+        assert result["output_file"] == str(output_file.absolute()), "Output file path should match"
         assert output_file.exists(), "Output file should be created"
 
         # Check output content
@@ -179,9 +177,9 @@ def test_2_extract_with_custom_threshold():
     """
     Test 2: Extract with custom threshold (0.4).
     """
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("TEST 2: Extract with custom threshold (0.4)")
-    print("="*80)
+    print("=" * 80)
 
     tmpdir = tempfile.mkdtemp()
     output_file = Path(tmpdir) / "test_output_2.txt"
@@ -195,7 +193,7 @@ def test_2_extract_with_custom_threshold():
             corpuses=[corpus_name],
             output_file=str(output_file),
             min_score=0.4,
-            verbose=True
+            verbose=True,
         )
 
         # Extract with lower threshold for comparison
@@ -205,14 +203,15 @@ def test_2_extract_with_custom_threshold():
             corpuses=[corpus_name],
             output_file=str(output_file_low),
             min_score=0.2,
-            verbose=False
+            verbose=False,
         )
 
         # Validate: higher threshold should have fewer results
-        assert result_high['total_chunks'] <= result_low['total_chunks'], \
-            "Higher threshold should return fewer or equal chunks"
+        assert (
+            result_high["total_chunks"] <= result_low["total_chunks"]
+        ), "Higher threshold should return fewer or equal chunks"
 
-        print(f"✅ PASSED: Threshold filtering works correctly")
+        print("✅ PASSED: Threshold filtering works correctly")
         print(f"   Min score 0.4: {result_high['total_chunks']} chunks")
         print(f"   Min score 0.2: {result_low['total_chunks']} chunks")
 
@@ -227,9 +226,9 @@ def test_3_extract_with_max_chunks_limit():
     """
     Test 3: Extract with max_chunks limit.
     """
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("TEST 3: Extract with max_chunks limit")
-    print("="*80)
+    print("=" * 80)
 
     tmpdir = tempfile.mkdtemp()
     output_file = Path(tmpdir) / "test_output_3.txt"
@@ -245,14 +244,15 @@ def test_3_extract_with_max_chunks_limit():
             output_file=str(output_file),
             min_score=0.2,
             max_chunks=max_limit,
-            verbose=True
+            verbose=True,
         )
 
         # Validate
-        assert result['total_chunks'] <= max_limit, \
-            f"Should not exceed max_chunks limit of {max_limit}"
+        assert (
+            result["total_chunks"] <= max_limit
+        ), f"Should not exceed max_chunks limit of {max_limit}"
 
-        print(f"✅ PASSED: Max chunks limit respected")
+        print("✅ PASSED: Max chunks limit respected")
         print(f"   Requested limit: {max_limit}")
         print(f"   Actual chunks: {result['total_chunks']}")
 
@@ -267,9 +267,9 @@ def test_4_extract_from_multiple_corpuses():
     """
     Test 4: Extract from multiple corpuses.
     """
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("TEST 4: Extract from multiple corpuses")
-    print("="*80)
+    print("=" * 80)
 
     tmpdir = tempfile.mkdtemp()
     output_file = Path(tmpdir) / "test_output_4.txt"
@@ -305,17 +305,17 @@ Penetration testing identifies weaknesses.
             corpuses=[corpus_name1, corpus_name2],
             output_file=str(output_file),
             min_score=0.3,
-            verbose=True
+            verbose=True,
         )
 
         # Validate
-        assert result['total_chunks'] > 0, "Should find chunks from multiple corpuses"
-        assert len(result['sources']) > 0, "Should have source files"
+        assert result["total_chunks"] > 0, "Should find chunks from multiple corpuses"
+        assert len(result["sources"]) > 0, "Should have source files"
 
         content = output_file.read_text()
         assert "SOURCE:" in content, "Output should contain source sections"
 
-        print(f"✅ PASSED: Multi-corpus extraction works")
+        print("✅ PASSED: Multi-corpus extraction works")
         print(f"   Total chunks: {result['total_chunks']}")
         print(f"   Sources: {len(result['sources'])}")
 
@@ -331,9 +331,9 @@ def test_5_verify_output_format():
     """
     Test 5: Verify output file format.
     """
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("TEST 5: Verify output file format")
-    print("="*80)
+    print("=" * 80)
 
     tmpdir = tempfile.mkdtemp()
     output_file = Path(tmpdir) / "test_output_5.txt"
@@ -342,12 +342,12 @@ def test_5_verify_output_format():
         test_file, corpus_name = create_test_corpus(tmpdir)
 
         # Extract content
-        result = extract_relevant_content(
+        extract_relevant_content(
             query="authentication",
             corpuses=[corpus_name],
             output_file=str(output_file),
             min_score=0.3,
-            verbose=False
+            verbose=False,
         )
 
         # Read and validate output format
@@ -368,7 +368,7 @@ def test_5_verify_output_format():
         # Check footer
         assert "END OF EXTRACTION" in content, "Missing footer"
 
-        print(f"✅ PASSED: Output format is correct")
+        print("✅ PASSED: Output format is correct")
 
         # Cleanup
         delete_corpus(corpus_name)
@@ -381,9 +381,9 @@ def test_6_verify_chunk_order_preservation():
     """
     Test 6: Verify chunks are in document order.
     """
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("TEST 6: Verify chunk order preservation")
-    print("="*80)
+    print("=" * 80)
 
     tmpdir = tempfile.mkdtemp()
     output_file = Path(tmpdir) / "test_output_6.txt"
@@ -392,12 +392,12 @@ def test_6_verify_chunk_order_preservation():
         test_file, corpus_name = create_test_corpus(tmpdir)
 
         # Extract content
-        result = extract_relevant_content(
+        extract_relevant_content(
             query="authentication OAuth testing neural",
             corpuses=[corpus_name],
             output_file=str(output_file),
             min_score=0.2,
-            verbose=False
+            verbose=False,
         )
 
         # Read output
@@ -410,22 +410,25 @@ def test_6_verify_chunk_order_preservation():
         neural_pos = content.find("Neural Networks")
 
         # If all found, check order (allowing for some not being found)
-        found_positions = [(pos, name) for pos, name in [
-            (auth_pos, "Authentication"),
-            (oauth_pos, "OAuth"),
-            (testing_pos, "Testing"),
-            (neural_pos, "Neural")
-        ] if pos != -1]
+        found_positions = [
+            (pos, name)
+            for pos, name in [
+                (auth_pos, "Authentication"),
+                (oauth_pos, "OAuth"),
+                (testing_pos, "Testing"),
+                (neural_pos, "Neural"),
+            ]
+            if pos != -1
+        ]
 
         if len(found_positions) >= 2:
             # Check that found items are in increasing position order
             positions = [pos for pos, _ in found_positions]
-            assert positions == sorted(positions), \
-                "Content should maintain document order"
-            print(f"✅ PASSED: Document order preserved")
+            assert positions == sorted(positions), "Content should maintain document order"
+            print("✅ PASSED: Document order preserved")
             print(f"   Found sections in order: {[name for _, name in found_positions]}")
         else:
-            print(f"⚠️  WARNING: Not enough sections found to verify order")
+            print("⚠️  WARNING: Not enough sections found to verify order")
             print(f"   Found: {len(found_positions)} sections")
 
         # Cleanup
@@ -439,9 +442,9 @@ def test_7_handle_missing_source_files():
     """
     Test 7: Handle missing source files gracefully.
     """
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("TEST 7: Handle missing source files gracefully")
-    print("="*80)
+    print("=" * 80)
 
     tmpdir = tempfile.mkdtemp()
     output_file = Path(tmpdir) / "test_output_7.txt"
@@ -453,18 +456,18 @@ def test_7_handle_missing_source_files():
         os.remove(test_file)
 
         # Extract should still work but warn about missing source
-        result = extract_relevant_content(
+        extract_relevant_content(
             query="authentication",
             corpuses=[corpus_name],
             output_file=str(output_file),
             min_score=0.3,
-            verbose=True
+            verbose=True,
         )
 
         # Should complete without crashing
         assert output_file.exists(), "Output file should still be created"
 
-        print(f"✅ PASSED: Handles missing source files gracefully")
+        print("✅ PASSED: Handles missing source files gracefully")
 
         # Cleanup
         delete_corpus(corpus_name)
@@ -477,9 +480,9 @@ def test_8_empty_results():
     """
     Test 8: Handle empty results (no chunks above threshold).
     """
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("TEST 8: Handle empty results")
-    print("="*80)
+    print("=" * 80)
 
     tmpdir = tempfile.mkdtemp()
     output_file = Path(tmpdir) / "test_output_8.txt"
@@ -493,14 +496,14 @@ def test_8_empty_results():
             corpuses=[corpus_name],
             output_file=str(output_file),
             min_score=0.9,  # Very high threshold
-            verbose=True
+            verbose=True,
         )
 
         # Should handle gracefully
-        assert result['total_chunks'] == 0, "Should find no chunks"
-        assert result['chunks_extracted'] == 0, "Should extract no chunks"
+        assert result["total_chunks"] == 0, "Should find no chunks"
+        assert result["chunks_extracted"] == 0, "Should extract no chunks"
 
-        print(f"✅ PASSED: Handles empty results gracefully")
+        print("✅ PASSED: Handles empty results gracefully")
 
         # Cleanup
         delete_corpus(corpus_name)
@@ -513,9 +516,9 @@ def run_all_tests():
     """
     Run all test cases.
     """
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("SEAR EXTRACTION FEATURE TEST SUITE")
-    print("="*80)
+    print("=" * 80)
 
     tests = [
         test_1_extract_with_default_threshold,
@@ -525,7 +528,7 @@ def run_all_tests():
         test_5_verify_output_format,
         test_6_verify_chunk_order_preservation,
         test_7_handle_missing_source_files,
-        test_8_empty_results
+        test_8_empty_results,
     ]
 
     passed = 0
@@ -542,9 +545,9 @@ def run_all_tests():
             print(f"❌ ERROR: {e}")
             failed += 1
 
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("TEST RESULTS")
-    print("="*80)
+    print("=" * 80)
     print(f"Passed: {passed}/{len(tests)}")
     print(f"Failed: {failed}/{len(tests)}")
 
@@ -553,7 +556,7 @@ def run_all_tests():
     else:
         print(f"\n⚠️  {failed} test(s) failed")
 
-    print("="*80)
+    print("=" * 80)
 
     return failed == 0
 

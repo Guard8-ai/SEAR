@@ -5,15 +5,13 @@ Handles markdown generation and file writing
 """
 
 import os
-from typing import Dict, Any
+from typing import Any
+
 from .metadata import format_metadata_header
 
 
 def format_markdown_output(
-    source_filename: str,
-    content: str,
-    metadata: Dict[str, Any],
-    include_title: bool = True
+    source_filename: str, content: str, metadata: dict[str, Any], include_title: bool = True
 ) -> str:
     """
     Format document content as markdown with metadata header
@@ -39,7 +37,7 @@ def format_markdown_output(
     # Add content
     output_parts.append(content)
 
-    return '\n'.join(output_parts)
+    return "\n".join(output_parts)
 
 
 def create_page_separator(page_number: int) -> str:
@@ -55,11 +53,7 @@ def create_page_separator(page_number: int) -> str:
     return f"\n\n---\n**Page {page_number}**\n---\n\n"
 
 
-def save_markdown_file(
-    content: str,
-    output_dir: str,
-    source_filename: str
-) -> str:
+def save_markdown_file(content: str, output_dir: str, source_filename: str) -> str:
     """
     Save markdown content to file with safe filename
 
@@ -76,10 +70,10 @@ def save_markdown_file(
 
     # Generate safe filename
     base_name = os.path.basename(source_filename)
-    safe_name = "".join(c for c in base_name if c.isalnum() or c in (' ', '-', '_', '.')).strip()
+    safe_name = "".join(c for c in base_name if c.isalnum() or c in (" ", "-", "_", ".")).strip()
 
     # Remove original extension and add .md
-    safe_name = os.path.splitext(safe_name)[0] + '.md'
+    safe_name = os.path.splitext(safe_name)[0] + ".md"
 
     output_path = os.path.join(output_dir, safe_name)
 

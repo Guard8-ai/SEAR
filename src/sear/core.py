@@ -32,47 +32,42 @@ Example Usage:
     )
 """
 
-import pickle
-import numpy as np
-from pathlib import Path
 import json
+import pickle
+from pathlib import Path
+
 import faiss
+import numpy as np
 
 # Public API - functions available for import
 __all__ = [
     # Core indexing and search
-    'index_file',
-    'search',
-    'extract_relevant_content',
-
+    "index_file",
+    "search",
+    "extract_relevant_content",
     # Corpus management
-    'list_corpuses',
-    'get_corpus_info',
-    'delete_corpus',
-    'validate_input_file',
-
+    "list_corpuses",
+    "get_corpus_info",
+    "delete_corpus",
+    "validate_input_file",
     # Boolean query operations (JSON format)
-    'execute_query',
-    'union_results',
-    'difference_results',
-    'intersect_results',
-
+    "execute_query",
+    "union_results",
+    "difference_results",
+    "intersect_results",
     # SQL query interface (NEW in v2.3.0)
-    'parse_sql_query',
-    'execute_sql_query',
-
+    "parse_sql_query",
+    "execute_sql_query",
     # LLM generation
-    'ollama_generate',
-    'anthropic_generate',
-
+    "ollama_generate",
+    "anthropic_generate",
     # GPU support
-    'is_gpu_available',
-    'get_gpu_info',
-    'init_gpu',
-
+    "is_gpu_available",
+    "get_gpu_info",
+    "init_gpu",
     # Document ordering utilities
-    'sort_by_document_order',
-    'merge_adjacent_chunks',
+    "sort_by_document_order",
+    "merge_adjacent_chunks",
 ]
 
 ###############################################################################
@@ -86,6 +81,7 @@ INDEX_DIR = Path("~/.sear").expanduser()
 GPU_AVAILABLE = False
 GPU_RESOURCES = None
 
+
 def init_gpu():
     """
     Initialize GPU resources for FAISS if available.
@@ -97,7 +93,7 @@ def init_gpu():
 
     try:
         # Check if FAISS was compiled with GPU support
-        if not hasattr(faiss, 'StandardGpuResources'):
+        if not hasattr(faiss, "StandardGpuResources"):
             return False
 
         # Check if CUDA GPUs are available
@@ -109,13 +105,15 @@ def init_gpu():
         GPU_RESOURCES = faiss.StandardGpuResources()
         GPU_AVAILABLE = True
         return True
-    except Exception as e:
+    except Exception:
         # GPU not available or error initializing
         GPU_AVAILABLE = False
         return False
 
+
 # Try to initialize GPU on module import
 init_gpu()
+
 
 def is_gpu_available():
     """
@@ -125,6 +123,7 @@ def is_gpu_available():
         bool: True if GPU is available, False otherwise
     """
     return GPU_AVAILABLE
+
 
 def get_gpu_info():
     """
@@ -138,12 +137,10 @@ def get_gpu_info():
 
     try:
         ngpus = faiss.get_num_gpus()
-        return {
-            'num_gpus': ngpus,
-            'available': True
-        }
-    except:
+        return {"num_gpus": ngpus, "available": True}
+    except Exception:
         return {}
+
 
 def index_cpu_to_gpu(cpu_index, gpu_id=0):
     """
@@ -166,6 +163,7 @@ def index_cpu_to_gpu(cpu_index, gpu_id=0):
         print(f"Warning: Failed to transfer index to GPU: {e}")
         return cpu_index
 
+
 def index_gpu_to_cpu(gpu_index):
     """
     Transfer a GPU index back to CPU for saving.
@@ -181,12 +179,14 @@ def index_gpu_to_cpu(gpu_index):
 
     try:
         return faiss.index_gpu_to_cpu(gpu_index)
-    except:
+    except Exception:
         return gpu_index
+
 
 ###############################################################################
 # CORE LIBRARY FUNCTIONS
 ###############################################################################
+
 
 def validate_input_file(filepath):
     """
@@ -205,7 +205,7 @@ def validate_input_file(filepath):
     path = Path(filepath)
 
     # Check if it looks like a URL
-    if filepath.startswith(('http://', 'https://', 'git@', 'git://')):
+    if filepath.startswith(("http://", "https://", "git@", "git://")):
         raise ValueError(
             f"URLs are not supported.\n"
             f"SEAR operates on text files only.\n"
@@ -227,7 +227,7 @@ def validate_input_file(filepath):
         )
 
     # Check if it's a git repository
-    if (path / '.git').exists() or path.name == '.git':
+    if (path / ".git").exists() or path.name == ".git":
         raise ValueError(
             f"'{filepath}' appears to be a git repository.\n"
             f"SEAR operates on text files only.\n"
@@ -237,17 +237,18 @@ def validate_input_file(filepath):
 
     # Check if file is readable
     try:
-        with open(filepath, 'r', encoding='utf-8') as f:
+        with open(filepath, encoding="utf-8") as f:
             f.read(1)  # Try reading first character
-    except UnicodeDecodeError:
+    except UnicodeDecodeError as e:
         raise ValueError(
             f"'{filepath}' is not a valid text file (encoding issue).\n"
             f"SEAR requires UTF-8 text files."
-        )
+        ) from e
     except Exception as e:
-        raise ValueError(f"Cannot read file: {e}")
+        raise ValueError(f"Cannot read file: {e}") from e
 
     return str(path)
+
 
 def get_model_context_length(model_name="all-minilm"):
     """
@@ -260,35 +261,37 @@ def get_model_context_length(model_name="all-minilm"):
         int: Context length in tokens, or None if not found
     """
     import http.client
+
     try:
         conn = http.client.HTTPConnection("localhost", 11434)
         payload = json.dumps({"name": model_name})
-        headers = {'Content-Type': 'application/json'}
+        headers = {"Content-Type": "application/json"}
         conn.request("POST", "/api/show", payload, headers)
         res = conn.getresponse()
         data = json.loads(res.read().decode("utf-8"))
         conn.close()
 
         # Try to extract num_ctx from parameters first (this is the active limit)
-        if 'parameters' in data:
-            params = data['parameters']
-            for line in params.split('\n'):
-                if 'num_ctx' in line:
+        if "parameters" in data:
+            params = data["parameters"]
+            for line in params.split("\n"):
+                if "num_ctx" in line:
                     # Format: "num_ctx                        256"
                     parts = line.split()
                     if len(parts) >= 2:
                         return int(parts[-1])
 
         # Fall back to model_info context_length
-        if 'model_info' in data:
-            for key, value in data['model_info'].items():
-                if 'context_length' in key:
+        if "model_info" in data:
+            for key, value in data["model_info"].items():
+                if "context_length" in key:
                     return int(value)
 
         return None
     except Exception as e:
         print(f"Warning: Could not get model context length: {e}")
         return None
+
 
 def estimate_tokens(text):
     """
@@ -315,6 +318,7 @@ def estimate_tokens(text):
     # Use 3.5x multiplier to handle worst-case scenarios (e.g., directory trees with Unicode chars)
     return int(base_tokens * 3.5)
 
+
 def ollama_embed(text, model_name="all-minilm", max_retries=3):
     """
     Get embedding from Ollama API with automatic truncation fallback.
@@ -338,7 +342,7 @@ def ollama_embed(text, model_name="all-minilm", max_retries=3):
     for attempt in range(max_retries + 1):
         conn = http.client.HTTPConnection("localhost", 11434)
         payload = json.dumps({"model": model_name, "prompt": current_text})
-        headers = {'Content-Type': 'application/json'}
+        headers = {"Content-Type": "application/json"}
         conn.request("POST", "/api/embeddings", payload, headers)
         res = conn.getresponse()
         raw_response = res.read().decode("utf-8")
@@ -346,28 +350,29 @@ def ollama_embed(text, model_name="all-minilm", max_retries=3):
         conn.close()
 
         # Success case
-        if 'embedding' in data:
+        if "embedding" in data:
             if attempt > 0:
                 # Warn that we had to truncate
                 print(f"   ⚠️  Truncated {original_length} → {len(current_text)} chars")
-            return np.array(data['embedding'], dtype='float32')
+            return np.array(data["embedding"], dtype="float32")
 
         # Error case
-        if 'error' in data and 'exceeds the context length' in data['error']:
+        if "error" in data and "exceeds the context length" in data["error"]:
             if attempt < max_retries:
                 # Try with 70% of current length
-                current_text = current_text[:int(len(current_text) * 0.7)]
+                current_text = current_text[: int(len(current_text) * 0.7)]
                 continue
             else:
                 # Give up after max retries
                 print(f"ERROR: Text too long even after {max_retries} truncations")
                 print(f"Original: {original_length} chars, Final: {len(current_text)} chars")
                 print(f"Response: {raw_response[:200]}")
-                raise KeyError(f"Text exceeds context length after truncation attempts")
+                raise KeyError("Text exceeds context length after truncation attempts")
 
         # Other errors
         print(f"ERROR: No 'embedding' in response. Got: {raw_response[:200]}")
         raise KeyError(f"'embedding' key missing. Response keys: {list(data.keys())}")
+
 
 def ollama_generate(prompt, temperature=0.0):
     """
@@ -381,22 +386,26 @@ def ollama_generate(prompt, temperature=0.0):
         str: Generated text
     """
     import http.client
+
     conn = http.client.HTTPConnection("localhost", 11434)
-    payload = json.dumps({
-        "model": "qwen2.5:0.5b",
-        "prompt": prompt,
-        "stream": False,
-        "options": {
-            "temperature": temperature,  # 0 = deterministic
-            "seed": 42  # Fixed seed for reproducibility
+    payload = json.dumps(
+        {
+            "model": "qwen2.5:0.5b",
+            "prompt": prompt,
+            "stream": False,
+            "options": {
+                "temperature": temperature,  # 0 = deterministic
+                "seed": 42,  # Fixed seed for reproducibility
+            },
         }
-    })
-    headers = {'Content-Type': 'application/json'}
+    )
+    headers = {"Content-Type": "application/json"}
     conn.request("POST", "/api/generate", payload, headers)
     res = conn.getresponse()
     data = json.loads(res.read().decode("utf-8"))
     conn.close()
-    return data.get('response', '').strip()
+    return data.get("response", "").strip()
+
 
 def anthropic_generate(prompt, temperature=0.0, api_key=None):
     """
@@ -417,7 +426,7 @@ def anthropic_generate(prompt, temperature=0.0, api_key=None):
 
     # Get API key from parameter or environment
     if api_key is None:
-        api_key = os.environ.get('ANTHROPIC_API_KEY')
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
 
     if not api_key:
         raise ValueError(
@@ -426,10 +435,8 @@ def anthropic_generate(prompt, temperature=0.0, api_key=None):
 
     try:
         from anthropic import Anthropic
-    except ImportError:
-        raise ImportError(
-            "Anthropic SDK not installed. Run: pip install anthropic"
-        )
+    except ImportError as e:
+        raise ImportError("Anthropic SDK not installed. Run: pip install anthropic") from e
 
     client = Anthropic(api_key=api_key)
 
@@ -437,13 +444,11 @@ def anthropic_generate(prompt, temperature=0.0, api_key=None):
         model="claude-sonnet-4-5-20250929",
         max_tokens=2048,
         temperature=temperature,
-        messages=[{
-            "role": "user",
-            "content": prompt
-        }]
+        messages=[{"role": "user", "content": prompt}],
     )
 
     return response.content[0].text.strip()
+
 
 def chunk_text(text, size=None, model_name="all-minilm"):
     """
@@ -475,7 +480,7 @@ def chunk_text(text, size=None, model_name="all-minilm"):
             # Fallback to conservative default
             size = 100
 
-    lines = text.split('\n')
+    lines = text.split("\n")
     chunks = []
     chunk_line_ranges = []
     current = []
@@ -489,7 +494,7 @@ def chunk_text(text, size=None, model_name="all-minilm"):
         if line_tokens > size:
             # First, flush current chunk if it has content
             if current:
-                chunks.append('\n'.join(current))
+                chunks.append("\n".join(current))
                 chunk_line_ranges.append((start_line, line_num - 1))
                 current = []
                 current_size = 0
@@ -503,7 +508,7 @@ def chunk_text(text, size=None, model_name="all-minilm"):
                 word_tokens = estimate_tokens(word)
                 if word_chunk_size + word_tokens > size and word_chunk:
                     # Save this word chunk
-                    chunks.append(' '.join(word_chunk))
+                    chunks.append(" ".join(word_chunk))
                     chunk_line_ranges.append((line_num, line_num))
                     word_chunk = []
                     word_chunk_size = 0
@@ -513,7 +518,7 @@ def chunk_text(text, size=None, model_name="all-minilm"):
 
             # Add remaining words from this long line
             if word_chunk:
-                chunks.append(' '.join(word_chunk))
+                chunks.append(" ".join(word_chunk))
                 chunk_line_ranges.append((line_num, line_num))
 
             start_line = line_num + 1
@@ -521,7 +526,7 @@ def chunk_text(text, size=None, model_name="all-minilm"):
         # Normal case: line fits within chunk size
         elif current_size + line_tokens > size and current:
             # Save current chunk
-            chunks.append('\n'.join(current))
+            chunks.append("\n".join(current))
             chunk_line_ranges.append((start_line, line_num - 1))
             current = []
             current_size = 0
@@ -534,12 +539,13 @@ def chunk_text(text, size=None, model_name="all-minilm"):
 
     # Add final chunk
     if current:
-        chunks.append('\n'.join(current))
+        chunks.append("\n".join(current))
         chunk_line_ranges.append((start_line, len(lines)))
 
     # Filter empty chunks
     filtered = [(c, r) for c, r in zip(chunks, chunk_line_ranges) if c.strip()]
     return [c for c, _ in filtered], [r for _, r in filtered]
+
 
 def get_corpus_dir(corpus_name):
     """
@@ -553,6 +559,7 @@ def get_corpus_dir(corpus_name):
     """
     return INDEX_DIR / corpus_name
 
+
 def get_corpus_paths(corpus_name):
     """
     Get file paths for a corpus's index, metadata, and file info.
@@ -565,10 +572,11 @@ def get_corpus_paths(corpus_name):
     """
     corpus_dir = get_corpus_dir(corpus_name)
     return {
-        'index': corpus_dir / 'index.faiss',
-        'chunks': corpus_dir / 'chunks.pkl',
-        'metadata': corpus_dir / 'metadata.json'
+        "index": corpus_dir / "index.faiss",
+        "chunks": corpus_dir / "chunks.pkl",
+        "metadata": corpus_dir / "metadata.json",
     }
+
 
 def list_corpuses():
     """
@@ -582,10 +590,11 @@ def list_corpuses():
 
     corpuses = []
     for item in INDEX_DIR.iterdir():
-        if item.is_dir() and (item / 'index.faiss').exists():
+        if item.is_dir() and (item / "index.faiss").exists():
             corpuses.append(item.name)
 
     return sorted(corpuses)
+
 
 def get_corpus_info(corpus_name):
     """
@@ -602,22 +611,23 @@ def get_corpus_info(corpus_name):
     """
     paths = get_corpus_paths(corpus_name)
 
-    if not paths['metadata'].exists():
+    if not paths["metadata"].exists():
         raise FileNotFoundError(f"Corpus '{corpus_name}' not found")
 
     try:
-        with open(paths['metadata'], 'r') as f:
+        with open(paths["metadata"]) as f:
             metadata = json.load(f)
 
         # Add chunk count if available
-        if paths['chunks'].exists():
-            with open(paths['chunks'], 'rb') as f:
+        if paths["chunks"].exists():
+            with open(paths["chunks"], "rb") as f:
                 chunks_data = pickle.load(f)
-                metadata['chunk_count'] = len(chunks_data['chunks'])
+                metadata["chunk_count"] = len(chunks_data["chunks"])
 
         return metadata
     except (json.JSONDecodeError, KeyError, FileNotFoundError) as e:
-        raise ValueError(f"Corrupted corpus metadata for '{corpus_name}': {e}")
+        raise ValueError(f"Corrupted corpus metadata for '{corpus_name}': {e}") from e
+
 
 def delete_corpus(corpus_name):
     """
@@ -637,6 +647,7 @@ def delete_corpus(corpus_name):
         raise FileNotFoundError(f"Corpus '{corpus_name}' not found")
 
     shutil.rmtree(corpus_dir)
+
 
 def validate_corpus_compatibility(corpus_names):
     """
@@ -661,24 +672,26 @@ def validate_corpus_compatibility(corpus_names):
             meta = get_corpus_info(name)
             corpus_metas.append((name, meta))
         except (FileNotFoundError, ValueError) as e:
-            raise ValueError(f"Cannot load corpus '{name}': {e}")
+            raise ValueError(f"Cannot load corpus '{name}': {e}") from e
 
     # Use first corpus as reference
     ref_name, ref_meta = corpus_metas[0]
     ref_settings = {
-        'embedding_model': ref_meta.get('embedding_model'),
-        'embedding_dim': ref_meta.get('embedding_dim'),
-        'faiss_index_type': ref_meta.get('faiss_index_type'),
-        'normalized': ref_meta.get('normalized')
+        "embedding_model": ref_meta.get("embedding_model"),
+        "embedding_dim": ref_meta.get("embedding_dim"),
+        "faiss_index_type": ref_meta.get("faiss_index_type"),
+        "normalized": ref_meta.get("normalized"),
     }
 
     # Validate all other corpuses match
     incompatible = []
     for name, meta in corpus_metas[1:]:
-        if (meta.get('embedding_model') != ref_settings['embedding_model'] or
-            meta.get('embedding_dim') != ref_settings['embedding_dim'] or
-            meta.get('faiss_index_type') != ref_settings['faiss_index_type'] or
-            meta.get('normalized') != ref_settings['normalized']):
+        if (
+            meta.get("embedding_model") != ref_settings["embedding_model"]
+            or meta.get("embedding_dim") != ref_settings["embedding_dim"]
+            or meta.get("faiss_index_type") != ref_settings["faiss_index_type"]
+            or meta.get("normalized") != ref_settings["normalized"]
+        ):
 
             incompatible.append(
                 f"  - {name}: {meta.get('embedding_model')} "
@@ -692,12 +705,13 @@ def validate_corpus_compatibility(corpus_names):
             f"  - {ref_name}: {ref_settings['embedding_model']} "
             f"({ref_settings['embedding_dim']}d, {ref_settings['faiss_index_type']}, "
             f"normalized={ref_settings['normalized']})\n"
-            + "\n".join(incompatible) +
-            f"\n\nRe-index incompatible corpuses or search them separately."
+            + "\n".join(incompatible)
+            + "\n\nRe-index incompatible corpuses or search them separately."
         )
         raise ValueError(error_msg)
 
     return ref_settings
+
 
 def index_file(filepath, corpus_name=None, verbose=True, use_gpu=None):
     """
@@ -742,37 +756,39 @@ def index_file(filepath, corpus_name=None, verbose=True, use_gpu=None):
     file_stat = file_path.stat()
 
     # Get model context length for metadata
-    model_name = 'all-minilm'
+    model_name = "all-minilm"
     context_length = get_model_context_length(model_name) or 256
 
     # Metadata schema with embedding details for compatibility validation
     file_metadata = {
-        'file_path': str(file_path.absolute()),
-        'file_modified': file_stat.st_mtime,
-        'file_size': file_stat.st_size,
-        'embedding_model': model_name,
-        'embedding_dim': None,  # Will be set after first embedding
-        'faiss_index_type': 'IndexFlatIP',
-        'normalized': True,
-        'context_length': context_length  # Store for query validation
+        "file_path": str(file_path.absolute()),
+        "file_modified": file_stat.st_mtime,
+        "file_size": file_stat.st_size,
+        "embedding_model": model_name,
+        "embedding_dim": None,  # Will be set after first embedding
+        "faiss_index_type": "IndexFlatIP",
+        "normalized": True,
+        "context_length": context_length,  # Store for query validation
     }
 
     # Check if we can skip re-indexing (cache hit)
-    if paths['metadata'].exists():
+    if paths["metadata"].exists():
         try:
-            with open(paths['metadata'], 'r') as f:
+            with open(paths["metadata"]) as f:
                 cached_meta = json.load(f)
 
-            if (cached_meta.get('file_path') == file_metadata['file_path'] and
-                cached_meta.get('file_modified') == file_metadata['file_modified'] and
-                cached_meta.get('file_size') == file_metadata['file_size']):
+            if (
+                cached_meta.get("file_path") == file_metadata["file_path"]
+                and cached_meta.get("file_modified") == file_metadata["file_modified"]
+                and cached_meta.get("file_size") == file_metadata["file_size"]
+            ):
                 if verbose:
                     print(f"✅ Cache hit: {corpus_name} is up to date")
                 # Return cached chunk count
-                if paths['chunks'].exists():
-                    with open(paths['chunks'], 'rb') as f:
+                if paths["chunks"].exists():
+                    with open(paths["chunks"], "rb") as f:
                         cached_data = pickle.load(f)
-                        return len(cached_data['chunks'])
+                        return len(cached_data["chunks"])
         except (json.JSONDecodeError, KeyError):
             pass  # Re-index if cache is corrupted
 
@@ -795,7 +811,7 @@ def index_file(filepath, corpus_name=None, verbose=True, use_gpu=None):
         try:
             emb = ollama_embed(chunk)  # Chunks are already sized appropriately
             embeddings.append(emb)
-        except KeyError as e:
+        except KeyError:
             # Provide debugging info on failure
             chunk_tokens = estimate_tokens(chunk)
             print(f"\n❌ Failed on chunk {i+1}/{len(chunks)}:")
@@ -806,10 +822,10 @@ def index_file(filepath, corpus_name=None, verbose=True, use_gpu=None):
             print(f"   First 200 chars: {chunk[:200]}")
             raise
 
-    embeddings = np.array(embeddings).astype('float32')
+    embeddings = np.array(embeddings).astype("float32")
 
     # Update metadata with actual embedding dimension
-    file_metadata['embedding_dim'] = embeddings.shape[1]
+    file_metadata["embedding_dim"] = embeddings.shape[1]
 
     if verbose:
         print("🏗️  Building FAISS index...")
@@ -836,14 +852,14 @@ def index_file(filepath, corpus_name=None, verbose=True, use_gpu=None):
     corpus_dir.mkdir(parents=True, exist_ok=True)
 
     # Save FAISS index (always save as CPU index for portability)
-    faiss.write_index(index, str(paths['index']))
+    faiss.write_index(index, str(paths["index"]))
 
     # Save chunks data
-    with open(paths['chunks'], 'wb') as f:
-        pickle.dump({'chunks': chunks, 'line_ranges': line_ranges, 'source': str(filepath)}, f)
+    with open(paths["chunks"], "wb") as f:
+        pickle.dump({"chunks": chunks, "line_ranges": line_ranges, "source": str(filepath)}, f)
 
     # Save file metadata for caching
-    with open(paths['metadata'], 'w') as f:
+    with open(paths["metadata"], "w") as f:
         json.dump(file_metadata, f, indent=2)
 
     if verbose:
@@ -851,7 +867,18 @@ def index_file(filepath, corpus_name=None, verbose=True, use_gpu=None):
 
     return len(chunks)
 
-def search(query, corpuses=None, top_k=5, verbose=True, temperature=0.0, min_score=0.30, use_gpu=None, provider='ollama', api_key=None):
+
+def search(
+    query,
+    corpuses=None,
+    top_k=5,
+    verbose=True,
+    temperature=0.0,
+    min_score=0.30,
+    use_gpu=None,
+    provider="ollama",
+    api_key=None,
+):
     """
     Search across one or more corpuses and generate an answer.
 
@@ -883,7 +910,7 @@ def search(query, corpuses=None, top_k=5, verbose=True, temperature=0.0, min_sco
         FileNotFoundError: If specified corpus doesn't exist
     """
     # Validate provider
-    if provider not in ['ollama', 'anthropic']:
+    if provider not in ["ollama", "anthropic"]:
         raise ValueError(f"Invalid provider '{provider}'. Must be 'ollama' or 'anthropic'.")
     # Determine GPU usage
     if use_gpu is None:
@@ -917,7 +944,7 @@ def search(query, corpuses=None, top_k=5, verbose=True, temperature=0.0, min_sco
     common_settings = validate_corpus_compatibility(corpuses)
 
     # Validate query length against model's context length
-    context_length = common_settings.get('context_length', 256)
+    context_length = common_settings.get("context_length", 256)
     query_tokens = estimate_tokens(query)
 
     if query_tokens > context_length:
@@ -927,7 +954,7 @@ def search(query, corpuses=None, top_k=5, verbose=True, temperature=0.0, min_sco
 
         raise ValueError(
             f"Query is too long ({query_tokens} estimated tokens, max: {context_length}).\n\n"
-            f"Your query:\n  \"{query}\"\n\n"
+            f'Your query:\n  "{query}"\n\n'
             f"Please provide a shorter, more concise query (max ~{recommended_chars} characters).\n"
             f"Focus on the key terms and concepts you're searching for."
         )
@@ -941,7 +968,7 @@ def search(query, corpuses=None, top_k=5, verbose=True, temperature=0.0, min_sco
         paths = get_corpus_paths(corpus_name)
 
         # Load FAISS index
-        cpu_index = faiss.read_index(str(paths['index']))
+        cpu_index = faiss.read_index(str(paths["index"]))
 
         # Transfer to GPU if enabled
         if use_gpu:
@@ -950,59 +977,65 @@ def search(query, corpuses=None, top_k=5, verbose=True, temperature=0.0, min_sco
             index = cpu_index
 
         # Load chunks data
-        with open(paths['chunks'], 'rb') as f:
+        with open(paths["chunks"], "rb") as f:
             chunks_data = pickle.load(f)
 
-        corpus_data.append({
-            'name': corpus_name,
-            'index': index,
-            'chunks': chunks_data['chunks'],
-            'line_ranges': chunks_data['line_ranges'],
-            'source': chunks_data['source']
-        })
+        corpus_data.append(
+            {
+                "name": corpus_name,
+                "index": index,
+                "chunks": chunks_data["chunks"],
+                "line_ranges": chunks_data["line_ranges"],
+                "source": chunks_data["source"],
+            }
+        )
 
     # Prepare query embedding
     if verbose:
         print(f"🔍 Searching for: {query}")
 
     query_emb = ollama_embed(query)  # ollama_embed will handle any necessary length limits
-    query_emb = np.array([query_emb]).astype('float32')
+    query_emb = np.array([query_emb]).astype("float32")
 
     # Normalize query if corpuses use normalized embeddings
-    if common_settings.get('normalized', True):
+    if common_settings.get("normalized", True):
         faiss.normalize_L2(query_emb)
 
     # Search all corpuses and aggregate results
     all_results = []
     for corpus in corpus_data:
-        distances, indices = corpus['index'].search(query_emb, top_k)
+        distances, indices = corpus["index"].search(query_emb, top_k)
 
         for idx, score in zip(indices[0], distances[0]):
-            chunk = corpus['chunks'][idx]
-            line_range = corpus['line_ranges'][idx]
-            source = corpus['source']
+            chunk = corpus["chunks"][idx]
+            line_range = corpus["line_ranges"][idx]
+            source = corpus["source"]
 
-            all_results.append({
-                'corpus': corpus['name'],
-                'score': float(score),
-                'chunk': chunk,
-                'location': f"{source}:{line_range[0]}-{line_range[1]}"
-            })
+            all_results.append(
+                {
+                    "corpus": corpus["name"],
+                    "score": float(score),
+                    "chunk": chunk,
+                    "location": f"{source}:{line_range[0]}-{line_range[1]}",
+                }
+            )
 
     # Sort by score (descending for similarity)
-    all_results.sort(key=lambda x: x['score'], reverse=True)
+    all_results.sort(key=lambda x: x["score"], reverse=True)
 
     # Take top N overall results
-    top_results = all_results[:top_k * 2]  # Get more context for answer generation
+    top_results = all_results[: top_k * 2]  # Get more context for answer generation
 
     # Filter results by minimum score if specified
     original_count = len(top_results)
     if min_score is not None:
-        quality_results = [r for r in top_results if r['score'] >= min_score]
+        quality_results = [r for r in top_results if r["score"] >= min_score]
         filtered_count = original_count - len(quality_results)
 
         if verbose:
-            print(f"🔍 Quality filter (min_score={min_score}): {len(quality_results)}/{original_count} results passed")
+            print(
+                f"🔍 Quality filter (min_score={min_score}): {len(quality_results)}/{original_count} results passed"
+            )
             if filtered_count > 0:
                 print(f"   ⚠️  Filtered out {filtered_count} low-quality results")
     else:
@@ -1013,23 +1046,27 @@ def search(query, corpuses=None, top_k=5, verbose=True, temperature=0.0, min_sco
     if min_score is not None and len(quality_results) < 2:
         # Not enough quality results - suggest query refinement
         if verbose:
-            print("\n" + "="*80)
+            print("\n" + "=" * 80)
             print("⚠️  INSUFFICIENT QUALITY RESULTS")
-            print("="*80)
+            print("=" * 80)
             print(f"Found only {len(quality_results)} result(s) with score ≥ {min_score}")
             print("\nSuggestion: Refine your query to be more specific to the corpus content.")
             if top_results:
                 print(f"\nTop result score: {top_results[0]['score']:.3f}")
                 print(f"Preview: {top_results[0]['chunk'][:150]}...")
-            print("="*80)
+            print("=" * 80)
 
         return {
-            'answer': f"⚠️  No high-quality matches found (only {len(quality_results)} result(s) with score ≥ {min_score}).\n\n"
-                     f"Please refine your query to be more specific to the corpus content.\n\n"
-                     f"Top result score: {top_results[0]['score']:.3f}" if top_results else "No results found.",
-            'sources': top_results,
-            'quality_results': len(quality_results),
-            'filtered_count': filtered_count
+            "answer": (
+                f"⚠️  No high-quality matches found (only {len(quality_results)} result(s) with score ≥ {min_score}).\n\n"
+                f"Please refine your query to be more specific to the corpus content.\n\n"
+                f"Top result score: {top_results[0]['score']:.3f}"
+                if top_results
+                else "No results found."
+            ),
+            "sources": top_results,
+            "quality_results": len(quality_results),
+            "filtered_count": filtered_count,
         }
 
     # Generate answer using only quality results
@@ -1053,7 +1090,7 @@ Instructions:
 Answer:"""
 
     # Generate answer using selected provider
-    if provider == 'anthropic':
+    if provider == "anthropic":
         if verbose:
             print("🤖 Using Anthropic Claude 3.5 Sonnet 4.5...")
         answer = anthropic_generate(prompt, temperature=temperature, api_key=api_key)
@@ -1062,26 +1099,29 @@ Answer:"""
 
     # Display results
     if verbose:
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
         print("📊 ANSWER")
-        print("="*80)
+        print("=" * 80)
         print(answer)
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
         print("📍 SOURCES (Quality Results)")
-        print("="*80)
+        print("=" * 80)
         for i, r in enumerate(quality_results[:5], 1):  # Show top 5 quality sources
             print(f"\n{i}. [{r['corpus']}] {r['location']} (score: {r['score']:.3f})")
             print(f"   {r['chunk'][:200]}...")
         if filtered_count > 0:
-            print(f"\n   ℹ️  Note: {filtered_count} low-quality result(s) filtered out (score < {min_score})")
-        print("="*80)
+            print(
+                f"\n   ℹ️  Note: {filtered_count} low-quality result(s) filtered out (score < {min_score})"
+            )
+        print("=" * 80)
 
     return {
-        'answer': answer,
-        'sources': quality_results,
-        'quality_results': len(quality_results),
-        'filtered_count': filtered_count
+        "answer": answer,
+        "sources": quality_results,
+        "quality_results": len(quality_results),
+        "filtered_count": filtered_count,
     }
+
 
 def reconstruct_text_from_chunks(chunks_metadata, source_file, verbose=False):
     """
@@ -1101,7 +1141,7 @@ def reconstruct_text_from_chunks(chunks_metadata, source_file, verbose=False):
         return ""
 
     # Sort by chunk_index to maintain document order
-    sorted_chunks = sorted(chunks_metadata, key=lambda x: x['chunk_index'])
+    sorted_chunks = sorted(chunks_metadata, key=lambda x: x["chunk_index"])
 
     # Read the source file once
     try:
@@ -1111,7 +1151,7 @@ def reconstruct_text_from_chunks(chunks_metadata, source_file, verbose=False):
                 print(f"⚠️  Warning: Source file not found: {source_file}")
             return ""
 
-        with open(source_path, 'r', encoding='utf-8') as f:
+        with open(source_path, encoding="utf-8") as f:
             lines = f.readlines()
     except Exception as e:
         if verbose:
@@ -1121,7 +1161,7 @@ def reconstruct_text_from_chunks(chunks_metadata, source_file, verbose=False):
     # Merge consecutive/overlapping line ranges
     merged_ranges = []
     for chunk in sorted_chunks:
-        start, end = chunk['line_range']
+        start, end = chunk["line_range"]
 
         if not merged_ranges:
             merged_ranges.append([start, end])
@@ -1139,9 +1179,10 @@ def reconstruct_text_from_chunks(chunks_metadata, source_file, verbose=False):
         # Line numbers are 1-indexed, list access is 0-indexed
         start_idx = max(0, start - 1)
         end_idx = min(len(lines), end)
-        reconstructed.append(''.join(lines[start_idx:end_idx]))
+        reconstructed.append("".join(lines[start_idx:end_idx]))
 
-    return '\n'.join(reconstructed)
+    return "\n".join(reconstructed)
+
 
 def extract_relevant_content(
     query,
@@ -1150,7 +1191,7 @@ def extract_relevant_content(
     min_score=0.3,
     max_chunks=None,
     use_gpu=None,
-    verbose=False
+    verbose=False,
 ):
     """
     Extract all content matching query above similarity threshold.
@@ -1220,7 +1261,7 @@ def extract_relevant_content(
     common_settings = validate_corpus_compatibility(corpuses)
 
     # Validate query length against model's context length
-    context_length = common_settings.get('context_length', 256)
+    context_length = common_settings.get("context_length", 256)
     query_tokens = estimate_tokens(query)
 
     if query_tokens > context_length:
@@ -1229,7 +1270,7 @@ def extract_relevant_content(
 
         raise ValueError(
             f"Query is too long ({query_tokens} estimated tokens, max: {context_length}).\n\n"
-            f"Your query:\n  \"{query}\"\n\n"
+            f'Your query:\n  "{query}"\n\n'
             f"Please provide a shorter query (max ~{recommended_chars} characters)."
         )
 
@@ -1242,7 +1283,7 @@ def extract_relevant_content(
         paths = get_corpus_paths(corpus_name)
 
         # Load FAISS index
-        cpu_index = faiss.read_index(str(paths['index']))
+        cpu_index = faiss.read_index(str(paths["index"]))
 
         # Transfer to GPU if enabled
         if use_gpu:
@@ -1251,26 +1292,28 @@ def extract_relevant_content(
             index = cpu_index
 
         # Load chunks data
-        with open(paths['chunks'], 'rb') as f:
+        with open(paths["chunks"], "rb") as f:
             chunks_data = pickle.load(f)
 
-        corpus_data.append({
-            'name': corpus_name,
-            'index': index,
-            'chunks': chunks_data['chunks'],
-            'line_ranges': chunks_data['line_ranges'],
-            'source': chunks_data['source']
-        })
+        corpus_data.append(
+            {
+                "name": corpus_name,
+                "index": index,
+                "chunks": chunks_data["chunks"],
+                "line_ranges": chunks_data["line_ranges"],
+                "source": chunks_data["source"],
+            }
+        )
 
     # Prepare query embedding
     if verbose:
         print(f"🔍 Searching for: {query}")
 
     query_emb = ollama_embed(query)
-    query_emb = np.array([query_emb]).astype('float32')
+    query_emb = np.array([query_emb]).astype("float32")
 
     # Normalize query if corpuses use normalized embeddings
-    if common_settings.get('normalized', True):
+    if common_settings.get("normalized", True):
         faiss.normalize_L2(query_emb)
 
     # Search all corpuses with large k to get ALL results
@@ -1283,27 +1326,29 @@ def extract_relevant_content(
 
     for corpus in corpus_data:
         # Get all results up to index size
-        k = min(large_k, corpus['index'].ntotal)
-        distances, indices = corpus['index'].search(query_emb, k)
+        k = min(large_k, corpus["index"].ntotal)
+        distances, indices = corpus["index"].search(query_emb, k)
 
         for idx, score in zip(indices[0], distances[0]):
             # Filter by minimum score threshold
             if score >= min_score:
-                chunk = corpus['chunks'][idx]
-                line_range = corpus['line_ranges'][idx]
-                source = corpus['source']
+                chunk = corpus["chunks"][idx]
+                line_range = corpus["line_ranges"][idx]
+                source = corpus["source"]
 
-                all_results.append({
-                    'corpus': corpus['name'],
-                    'score': float(score),
-                    'chunk': chunk,
-                    'chunk_index': idx,
-                    'line_range': line_range,
-                    'source': source
-                })
+                all_results.append(
+                    {
+                        "corpus": corpus["name"],
+                        "score": float(score),
+                        "chunk": chunk,
+                        "chunk_index": idx,
+                        "line_range": line_range,
+                        "source": source,
+                    }
+                )
 
     # Sort by score (descending)
-    all_results.sort(key=lambda x: x['score'], reverse=True)
+    all_results.sort(key=lambda x: x["score"], reverse=True)
 
     # Apply max_chunks limit if specified
     if max_chunks is not None:
@@ -1316,23 +1361,23 @@ def extract_relevant_content(
         if verbose:
             print("⚠️  No chunks found above threshold")
         return {
-            'total_chunks': 0,
-            'chunks_extracted': 0,
-            'output_file': output_file,
-            'score_range': (0, 0),
-            'sources': []
+            "total_chunks": 0,
+            "chunks_extracted": 0,
+            "output_file": output_file,
+            "score_range": (0, 0),
+            "sources": [],
         }
 
     # Group results by source file
     results_by_source = {}
     for result in all_results:
-        source = result['source']
+        source = result["source"]
         if source not in results_by_source:
             results_by_source[source] = []
         results_by_source[source].append(result)
 
     # Calculate statistics
-    scores = [r['score'] for r in all_results]
+    scores = [r["score"] for r in all_results]
     score_range = (min(scores), max(scores))
 
     if verbose:
@@ -1345,7 +1390,7 @@ def extract_relevant_content(
     output_lines.append("=" * 80)
     output_lines.append("SEAR EXTRACTED CONTENT")
     output_lines.append("=" * 80)
-    output_lines.append(f"Query: \"{query}\"")
+    output_lines.append(f'Query: "{query}"')
     output_lines.append(f"Corpus: {', '.join(corpuses)}")
     output_lines.append(f"Min Score: {min_score}")
     output_lines.append(f"Total Chunks: {len(all_results)}")
@@ -1378,8 +1423,8 @@ def extract_relevant_content(
 
     # Write to output file
     output_path = Path(output_file)
-    with open(output_path, 'w', encoding='utf-8') as f:
-        f.write('\n'.join(output_lines))
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(output_lines))
 
     if verbose:
         print(f"✅ Extraction complete: {len(all_results)} chunks saved to {output_file}")
@@ -1387,16 +1432,18 @@ def extract_relevant_content(
         print(f"   Sources: {len(results_by_source)} file(s)")
 
     return {
-        'total_chunks': len(all_results),
-        'chunks_extracted': chunks_extracted,
-        'output_file': str(output_path.absolute()),
-        'score_range': score_range,
-        'sources': list(results_by_source.keys())
+        "total_chunks": len(all_results),
+        "chunks_extracted": chunks_extracted,
+        "output_file": str(output_path.absolute()),
+        "score_range": score_range,
+        "sources": list(results_by_source.keys()),
     }
+
 
 ###############################################################################
 # BOOLEAN LOGIC OPERATIONS
 ###############################################################################
+
 
 def _chunk_to_key(chunk_result):
     """
@@ -1410,7 +1457,8 @@ def _chunk_to_key(chunk_result):
     Returns:
         tuple: (corpus, location) as hashable key
     """
-    return (chunk_result['corpus'], chunk_result['location'])
+    return (chunk_result["corpus"], chunk_result["location"])
+
 
 def union_results(result_sets):
     """
@@ -1436,11 +1484,12 @@ def union_results(result_sets):
             key = _chunk_to_key(result)
 
             # Keep the result with the highest score
-            if key not in combined or result['score'] > combined[key]['score']:
+            if key not in combined or result["score"] > combined[key]["score"]:
                 combined[key] = result
 
     # Return as list
     return list(combined.values())
+
 
 def difference_results(set_a, set_b, semantic=False, threshold=0.7):
     """
@@ -1485,19 +1534,19 @@ def difference_results(set_a, set_b, semantic=False, threshold=0.7):
         # Load FAISS indices for all corpuses involved
         all_corpuses = set()
         for result in remaining:
-            all_corpuses.add(result['corpus'])
+            all_corpuses.add(result["corpus"])
         for result in set_b:
-            all_corpuses.add(result['corpus'])
+            all_corpuses.add(result["corpus"])
 
         for corpus_name in all_corpuses:
             paths = get_corpus_paths(corpus_name)
-            corpus_indices[corpus_name] = faiss.read_index(str(paths['index']))
+            corpus_indices[corpus_name] = faiss.read_index(str(paths["index"]))
 
         # Extract embeddings for exclusion set (set_b)
         exclude_embeddings = []
         for result in set_b:
-            corpus_name = result['corpus']
-            chunk_idx = result.get('chunk_index')
+            corpus_name = result["corpus"]
+            chunk_idx = result.get("chunk_index")
             if chunk_idx is not None and corpus_name in corpus_indices:
                 # Retrieve embedding from FAISS index using reconstruct()
                 index = corpus_indices[corpus_name]
@@ -1509,13 +1558,13 @@ def difference_results(set_a, set_b, semantic=False, threshold=0.7):
             return remaining
 
         # Convert to numpy array for efficient computation
-        exclude_embeddings = np.array(exclude_embeddings).astype('float32')
+        exclude_embeddings = np.array(exclude_embeddings).astype("float32")
 
         # Filter remaining chunks by semantic similarity
         filtered_results = []
         for result in remaining:
-            corpus_name = result['corpus']
-            chunk_idx = result.get('chunk_index')
+            corpus_name = result["corpus"]
+            chunk_idx = result.get("chunk_index")
 
             if chunk_idx is None or corpus_name not in corpus_indices:
                 # Can't get embedding, keep the chunk (conservative approach)
@@ -1525,7 +1574,7 @@ def difference_results(set_a, set_b, semantic=False, threshold=0.7):
             # Retrieve embedding for this chunk from FAISS
             index = corpus_indices[corpus_name]
             chunk_embedding = index.reconstruct(int(chunk_idx))
-            chunk_embedding = np.array(chunk_embedding).astype('float32')
+            chunk_embedding = np.array(chunk_embedding).astype("float32")
 
             # Calculate cosine similarity with all exclusion embeddings
             # Embeddings are already normalized (we use IndexFlatIP with normalized vectors)
@@ -1542,6 +1591,7 @@ def difference_results(set_a, set_b, semantic=False, threshold=0.7):
         # If semantic filtering fails, fall back to exact matching
         print(f"⚠️  Semantic filtering failed: {e}. Using exact matching only.")
         return remaining
+
 
 def intersect_results(set_a, set_b):
     """
@@ -1570,12 +1620,13 @@ def intersect_results(set_a, set_b):
     results = []
     for key in intersect_keys:
         # Pick the result with higher score
-        if dict_a[key]['score'] >= dict_b[key]['score']:
+        if dict_a[key]["score"] >= dict_b[key]["score"]:
             results.append(dict_a[key])
         else:
             results.append(dict_b[key])
 
     return results
+
 
 def _parse_location(location_string):
     """
@@ -1596,19 +1647,19 @@ def _parse_location(location_string):
     """
     try:
         # Split on last colon to handle paths with colons
-        if ':' not in location_string:
+        if ":" not in location_string:
             return (location_string, 0, 0)
 
         # Find the last colon (separates path from line range)
-        last_colon_idx = location_string.rfind(':')
+        last_colon_idx = location_string.rfind(":")
         filepath = location_string[:last_colon_idx]
-        line_range = location_string[last_colon_idx + 1:]
+        line_range = location_string[last_colon_idx + 1 :]
 
         # Parse line range "557-659"
-        if '-' not in line_range:
+        if "-" not in line_range:
             return (location_string, 0, 0)
 
-        start_str, end_str = line_range.split('-', 1)
+        start_str, end_str = line_range.split("-", 1)
         start_line = int(start_str)
         end_line = int(end_str)
 
@@ -1617,6 +1668,7 @@ def _parse_location(location_string):
     except (ValueError, AttributeError):
         # If parsing fails, return original string with 0,0 range
         return (location_string, 0, 0)
+
 
 def sort_by_document_order(chunks):
     """
@@ -1645,12 +1697,13 @@ def sort_by_document_order(chunks):
 
     def sort_key(chunk):
         """Extract sort key from chunk."""
-        corpus = chunk.get('corpus', '')
-        location = chunk.get('location', '')
+        corpus = chunk.get("corpus", "")
+        location = chunk.get("location", "")
         filepath, start_line, _ = _parse_location(location)
         return (corpus, filepath, start_line)
 
     return sorted(chunks, key=sort_key)
+
 
 def merge_adjacent_chunks(chunks):
     """
@@ -1695,34 +1748,34 @@ def merge_adjacent_chunks(chunks):
             continue
 
         # Parse current and new chunk locations
-        curr_corpus = current.get('corpus', '')
-        curr_location = current.get('location', '')
+        curr_corpus = current.get("corpus", "")
+        curr_location = current.get("location", "")
         curr_filepath, curr_start, curr_end = _parse_location(curr_location)
 
-        new_corpus = chunk.get('corpus', '')
-        new_location = chunk.get('location', '')
+        new_corpus = chunk.get("corpus", "")
+        new_location = chunk.get("location", "")
         new_filepath, new_start, new_end = _parse_location(new_location)
 
         # Check if chunks can be merged
         same_corpus = curr_corpus == new_corpus
         same_file = curr_filepath == new_filepath
         # Lines touch or overlap: end of current + 1 >= start of new
-        lines_adjacent = (curr_end + 1 >= new_start)
+        lines_adjacent = curr_end + 1 >= new_start
 
         if same_corpus and same_file and lines_adjacent:
             # Merge chunks
             # Keep highest score
-            current['score'] = max(current['score'], chunk['score'])
+            current["score"] = max(current["score"], chunk["score"])
 
             # Concatenate text
-            current_text = current.get('chunk', '')
-            new_text = chunk.get('chunk', '')
-            current['chunk'] = current_text + '\n' + new_text
+            current_text = current.get("chunk", "")
+            new_text = chunk.get("chunk", "")
+            current["chunk"] = current_text + "\n" + new_text
 
             # Combine line ranges: min start, max end
             merged_start = min(curr_start, new_start)
             merged_end = max(curr_end, new_end)
-            current['location'] = f"{curr_filepath}:{merged_start}-{merged_end}"
+            current["location"] = f"{curr_filepath}:{merged_start}-{merged_end}"
 
         else:
             # Cannot merge - save current and start new
@@ -1740,7 +1793,10 @@ def merge_adjacent_chunks(chunks):
 # Task 3: JSON Query Executor
 # =============================================================================
 
-def _retrieve_chunks_only(query, corpuses=None, min_score=0.3, max_results=None, use_gpu=None, verbose=False):
+
+def _retrieve_chunks_only(
+    query, corpuses=None, min_score=0.3, max_results=None, use_gpu=None, verbose=False
+):
     """
     Internal function to retrieve chunks without LLM processing.
 
@@ -1776,7 +1832,7 @@ def _retrieve_chunks_only(query, corpuses=None, min_score=0.3, max_results=None,
     common_settings = validate_corpus_compatibility(corpuses)
 
     # Validate query length
-    context_length = common_settings.get('context_length', 256)
+    context_length = common_settings.get("context_length", 256)
     query_tokens = estimate_tokens(query)
 
     if query_tokens > context_length:
@@ -1793,7 +1849,7 @@ def _retrieve_chunks_only(query, corpuses=None, min_score=0.3, max_results=None,
         paths = get_corpus_paths(corpus_name)
 
         # Load FAISS index
-        cpu_index = faiss.read_index(str(paths['index']))
+        cpu_index = faiss.read_index(str(paths["index"]))
 
         # Transfer to GPU if enabled
         if use_gpu:
@@ -1802,23 +1858,25 @@ def _retrieve_chunks_only(query, corpuses=None, min_score=0.3, max_results=None,
             index = cpu_index
 
         # Load chunks data
-        with open(paths['chunks'], 'rb') as f:
+        with open(paths["chunks"], "rb") as f:
             chunks_data = pickle.load(f)
 
-        corpus_data.append({
-            'name': corpus_name,
-            'index': index,
-            'chunks': chunks_data['chunks'],
-            'line_ranges': chunks_data['line_ranges'],
-            'source': chunks_data['source']
-        })
+        corpus_data.append(
+            {
+                "name": corpus_name,
+                "index": index,
+                "chunks": chunks_data["chunks"],
+                "line_ranges": chunks_data["line_ranges"],
+                "source": chunks_data["source"],
+            }
+        )
 
     # Prepare query embedding
     query_emb = ollama_embed(query)
-    query_emb = np.array([query_emb]).astype('float32')
+    query_emb = np.array([query_emb]).astype("float32")
 
     # Normalize query if corpuses use normalized embeddings
-    if common_settings.get('normalized', True):
+    if common_settings.get("normalized", True):
         faiss.normalize_L2(query_emb)
 
     # Search all corpuses
@@ -1827,25 +1885,27 @@ def _retrieve_chunks_only(query, corpuses=None, min_score=0.3, max_results=None,
 
     for corpus in corpus_data:
         # Get results up to index size
-        k = min(large_k, corpus['index'].ntotal)
-        distances, indices = corpus['index'].search(query_emb, k)
+        k = min(large_k, corpus["index"].ntotal)
+        distances, indices = corpus["index"].search(query_emb, k)
 
         for idx, score in zip(indices[0], distances[0]):
             # Filter by minimum score threshold
             if score >= min_score:
-                chunk = corpus['chunks'][idx]
-                line_range = corpus['line_ranges'][idx]
-                source = corpus['source']
+                chunk = corpus["chunks"][idx]
+                line_range = corpus["line_ranges"][idx]
+                source = corpus["source"]
 
-                all_results.append({
-                    'corpus': corpus['name'],
-                    'location': f"{source}:{line_range[0]}-{line_range[1]}",
-                    'score': float(score),
-                    'chunk': chunk
-                })
+                all_results.append(
+                    {
+                        "corpus": corpus["name"],
+                        "location": f"{source}:{line_range[0]}-{line_range[1]}",
+                        "score": float(score),
+                        "chunk": chunk,
+                    }
+                )
 
     # Sort by score (highest first)
-    all_results.sort(key=lambda x: x['score'], reverse=True)
+    all_results.sort(key=lambda x: x["score"], reverse=True)
 
     # Limit results if requested
     if max_results is not None:
@@ -1938,7 +1998,6 @@ def execute_query(query_spec, use_gpu=None, verbose=False):
         ... }
         >>> results = execute_query(query, verbose=True)
     """
-    import json
 
     # Validate input is a dict
     if not isinstance(query_spec, dict):
@@ -1946,11 +2005,11 @@ def execute_query(query_spec, use_gpu=None, verbose=False):
 
     # Extract common options with defaults
     options = {
-        'corpuses': query_spec.get('corpuses', None),
-        'min_score': query_spec.get('min_score', 0.3),
-        'max_results': query_spec.get('max_results', None),
-        'sort': query_spec.get('sort', True),
-        'merge_adjacent': query_spec.get('merge_adjacent', True)
+        "corpuses": query_spec.get("corpuses", None),
+        "min_score": query_spec.get("min_score", 0.3),
+        "max_results": query_spec.get("max_results", None),
+        "sort": query_spec.get("sort", True),
+        "merge_adjacent": query_spec.get("merge_adjacent", True),
     }
 
     if verbose:
@@ -1965,22 +2024,22 @@ def execute_query(query_spec, use_gpu=None, verbose=False):
             print(f"{indent}🔍 Processing node at depth {depth}")
 
         # Check if this is a simple query (no operation)
-        if 'operation' not in node:
+        if "operation" not in node:
             # Simple query - just retrieve chunks
-            if 'query' not in node:
+            if "query" not in node:
                 raise ValueError("Query node must have either 'operation' or 'query' field")
 
-            query_str = node['query']
+            query_str = node["query"]
             if verbose:
                 print(f"{indent}  📝 Simple query: '{query_str}'")
 
             results = _retrieve_chunks_only(
                 query=query_str,
-                corpuses=options['corpuses'],
-                min_score=options['min_score'],
-                max_results=options['max_results'],
+                corpuses=options["corpuses"],
+                min_score=options["min_score"],
+                max_results=options["max_results"],
                 use_gpu=use_gpu,
-                verbose=False
+                verbose=False,
             )
 
             if verbose:
@@ -1989,14 +2048,14 @@ def execute_query(query_spec, use_gpu=None, verbose=False):
             return results
 
         # Operation-based query
-        operation = node['operation'].lower()
+        operation = node["operation"].lower()
 
-        if operation == 'union':
+        if operation == "union":
             # Union: combine multiple queries
-            if 'queries' not in node:
+            if "queries" not in node:
                 raise ValueError("Union operation requires 'queries' field")
 
-            queries = node['queries']
+            queries = node["queries"]
             if not isinstance(queries, list) or len(queries) < 2:
                 raise ValueError("Union requires at least 2 queries")
 
@@ -2012,11 +2071,11 @@ def execute_query(query_spec, use_gpu=None, verbose=False):
                         print(f"{indent}    Query {i+1}: '{q}'")
                     results = _retrieve_chunks_only(
                         query=q,
-                        corpuses=options['corpuses'],
-                        min_score=options['min_score'],
-                        max_results=options['max_results'],
+                        corpuses=options["corpuses"],
+                        min_score=options["min_score"],
+                        max_results=options["max_results"],
                         use_gpu=use_gpu,
-                        verbose=False
+                        verbose=False,
                     )
                 elif isinstance(q, dict):
                     # Nested query
@@ -2037,12 +2096,12 @@ def execute_query(query_spec, use_gpu=None, verbose=False):
 
             return combined
 
-        elif operation == 'intersect':
+        elif operation == "intersect":
             # Intersect: overlapping results only
-            if 'queries' not in node:
+            if "queries" not in node:
                 raise ValueError("Intersect operation requires 'queries' field")
 
-            queries = node['queries']
+            queries = node["queries"]
             if not isinstance(queries, list) or len(queries) < 2:
                 raise ValueError("Intersect requires at least 2 queries")
 
@@ -2057,11 +2116,11 @@ def execute_query(query_spec, use_gpu=None, verbose=False):
                         print(f"{indent}    Query {i+1}: '{q}'")
                     results = _retrieve_chunks_only(
                         query=q,
-                        corpuses=options['corpuses'],
-                        min_score=options['min_score'],
-                        max_results=options['max_results'],
+                        corpuses=options["corpuses"],
+                        min_score=options["min_score"],
+                        max_results=options["max_results"],
                         use_gpu=use_gpu,
-                        verbose=False
+                        verbose=False,
                     )
                 elif isinstance(q, dict):
                     if verbose:
@@ -2085,33 +2144,33 @@ def execute_query(query_spec, use_gpu=None, verbose=False):
 
             return combined
 
-        elif operation == 'difference':
+        elif operation == "difference":
             # Difference: A - B (exclude B from A)
             # Support two formats:
             # 1. "left"/"right" for nested operations
             # 2. "query"/"exclude" for simple queries
 
-            if 'left' in node and 'right' in node:
+            if "left" in node and "right" in node:
                 # Nested format
                 if verbose:
                     print(f"{indent}  - Difference (left - right)")
                     print(f"{indent}    Left operand:")
 
-                left_results = _execute_node(node['left'], depth + 2)
+                left_results = _execute_node(node["left"], depth + 2)
 
                 if verbose:
                     print(f"{indent}      → {len(left_results)} chunks")
                     print(f"{indent}    Right operand:")
 
-                right_results = _execute_node(node['right'], depth + 2)
+                right_results = _execute_node(node["right"], depth + 2)
 
                 if verbose:
                     print(f"{indent}      → {len(right_results)} chunks")
 
-            elif 'query' in node and 'exclude' in node:
+            elif "query" in node and "exclude" in node:
                 # Simple format
-                main_query = node['query']
-                exclude_query = node['exclude']
+                main_query = node["query"]
+                exclude_query = node["exclude"]
 
                 if verbose:
                     print(f"{indent}  - Difference")
@@ -2119,11 +2178,11 @@ def execute_query(query_spec, use_gpu=None, verbose=False):
 
                 left_results = _retrieve_chunks_only(
                     query=main_query,
-                    corpuses=options['corpuses'],
-                    min_score=options['min_score'],
-                    max_results=options['max_results'],
+                    corpuses=options["corpuses"],
+                    min_score=options["min_score"],
+                    max_results=options["max_results"],
                     use_gpu=use_gpu,
-                    verbose=False
+                    verbose=False,
                 )
 
                 if verbose:
@@ -2132,11 +2191,11 @@ def execute_query(query_spec, use_gpu=None, verbose=False):
 
                 right_results = _retrieve_chunks_only(
                     query=exclude_query,
-                    corpuses=options['corpuses'],
-                    min_score=options['min_score'],
-                    max_results=options['max_results'],
+                    corpuses=options["corpuses"],
+                    min_score=options["min_score"],
+                    max_results=options["max_results"],
                     use_gpu=use_gpu,
-                    verbose=False
+                    verbose=False,
                 )
 
                 if verbose:
@@ -2147,9 +2206,11 @@ def execute_query(query_spec, use_gpu=None, verbose=False):
                 )
 
             # Apply difference operation
-            semantic = query_spec.get('semantic', False)
-            threshold = query_spec.get('threshold', 0.7)
-            result = difference_results(left_results, right_results, semantic=semantic, threshold=threshold)
+            semantic = query_spec.get("semantic", False)
+            threshold = query_spec.get("threshold", 0.7)
+            result = difference_results(
+                left_results, right_results, semantic=semantic, threshold=threshold
+            )
 
             if verbose:
                 semantic_msg = f" (semantic, threshold={threshold})" if semantic else ""
@@ -2158,7 +2219,9 @@ def execute_query(query_spec, use_gpu=None, verbose=False):
             return result
 
         else:
-            raise ValueError(f"Unknown operation: {operation}. Supported: union, intersect, difference")
+            raise ValueError(
+                f"Unknown operation: {operation}. Supported: union, intersect, difference"
+            )
 
     # Execute the query tree
     if verbose:
@@ -2173,14 +2236,14 @@ def execute_query(query_spec, use_gpu=None, verbose=False):
         print(f"✓ Query execution complete: {len(results)} total chunks")
 
     # Post-processing: sort and merge if requested
-    if options['sort'] and len(results) > 0:
+    if options["sort"] and len(results) > 0:
         if verbose:
             print("📊 Sorting results by document order...")
         results = sort_by_document_order(results)
         if verbose:
             print(f"  ✓ Sorted {len(results)} chunks")
 
-    if options['merge_adjacent'] and len(results) > 0:
+    if options["merge_adjacent"] and len(results) > 0:
         if verbose:
             print("🔗 Merging adjacent chunks...")
         original_count = len(results)
@@ -2199,6 +2262,7 @@ def execute_query(query_spec, use_gpu=None, verbose=False):
 ###############################################################################
 # SQL INTERFACE
 ###############################################################################
+
 
 def parse_sql_query(sql_str, verbose=False):
     """
@@ -2254,11 +2318,12 @@ def parse_sql_query(sql_str, verbose=False):
         >>> query_spec = parse_sql_query(sql)
         >>> results = execute_query(query_spec)
     """
-    import sqlparse
     import re
 
+    import sqlparse
+
     if verbose:
-        print(f"🔍 Parsing SQL query...")
+        print("🔍 Parsing SQL query...")
         print(f"   Input: {sql_str}")
 
     # Clean up the SQL string
@@ -2271,9 +2336,9 @@ def parse_sql_query(sql_str, verbose=False):
         parsed = sqlparse.parse(sql_str)
         if not parsed:
             raise ValueError("Failed to parse SQL query")
-        statement = parsed[0]
+        parsed[0]
     except Exception as e:
-        raise ValueError(f"SQL parsing error: {e}")
+        raise ValueError(f"SQL parsing error: {e}") from e
 
     # Extract options from WHERE clause if present
     options = {}
@@ -2281,9 +2346,9 @@ def parse_sql_query(sql_str, verbose=False):
 
     # Convert SQL statement to string and look for WHERE clause
     sql_upper = sql_str.upper()
-    if 'WHERE' in sql_upper:
+    if "WHERE" in sql_upper:
         # Split on WHERE to separate main query from options
-        parts = sql_str.split('WHERE', 1)
+        parts = sql_str.split("WHERE", 1)
         if len(parts) == 2:
             sql_str = parts[0].strip()
             where_clause = parts[1].strip()
@@ -2299,28 +2364,28 @@ def parse_sql_query(sql_str, verbose=False):
                 # Extract quoted strings
                 corpuses = re.findall(r"['\"]([^'\"]+)['\"]", corpus_list)
                 if corpuses:
-                    options['corpuses'] = corpuses
+                    options["corpuses"] = corpuses
                     if verbose:
                         print(f"   Extracted corpuses: {corpuses}")
 
             # min_score >= 0.35
             score_match = re.search(r"min_score\s*>=?\s*([\d.]+)", where_clause, re.IGNORECASE)
             if score_match:
-                options['min_score'] = float(score_match.group(1))
+                options["min_score"] = float(score_match.group(1))
                 if verbose:
                     print(f"   Extracted min_score: {options['min_score']}")
 
             # semantic = true
             semantic_match = re.search(r"semantic\s*=\s*(true|false)", where_clause, re.IGNORECASE)
             if semantic_match:
-                options['semantic'] = semantic_match.group(1).lower() == 'true'
+                options["semantic"] = semantic_match.group(1).lower() == "true"
                 if verbose:
                     print(f"   Extracted semantic: {options['semantic']}")
 
             # threshold >= 0.7
             threshold_match = re.search(r"threshold\s*>=?\s*([\d.]+)", where_clause, re.IGNORECASE)
             if threshold_match:
-                options['threshold'] = float(threshold_match.group(1))
+                options["threshold"] = float(threshold_match.group(1))
                 if verbose:
                     print(f"   Extracted threshold: {options['threshold']}")
 
@@ -2331,7 +2396,7 @@ def parse_sql_query(sql_str, verbose=False):
     query_spec.update(options)
 
     if verbose:
-        print(f"✓ Parsed successfully")
+        print("✓ Parsed successfully")
         print(f"   JSON query spec: {json.dumps(query_spec, indent=2)}")
 
     return query_spec
@@ -2354,14 +2419,14 @@ def _parse_sql_node(sql_str, verbose=False):
 
     # Remove outer parentheses if present - but only if they match
     # We need to check if the opening paren matches the closing paren
-    if sql_str.startswith('(') and sql_str.endswith(')'):
+    if sql_str.startswith("(") and sql_str.endswith(")"):
         # Check if this is truly an outer pair (not just coincidental)
         depth = 0
         outer_pair = True
         for i, char in enumerate(sql_str):
-            if char == '(':
+            if char == "(":
                 depth += 1
-            elif char == ')':
+            elif char == ")":
                 depth -= 1
                 # If depth hits 0 before the last character, these aren't outer parens
                 if depth == 0 and i < len(sql_str) - 1:
@@ -2381,17 +2446,18 @@ def _parse_sql_node(sql_str, verbose=False):
 
     # Track positions of UNION, EXCEPT, INTERSECT at top level
     for i, char in enumerate(sql_str):
-        if char == '(':
+        if char == "(":
             paren_depth += 1
-        elif char == ')':
+        elif char == ")":
             paren_depth -= 1
         elif paren_depth == 0:
             # Check for operations at this position
-            for op in ['UNION', 'EXCEPT', 'INTERSECT']:
-                if sql_upper[i:i+len(op)] == op:
+            for op in ["UNION", "EXCEPT", "INTERSECT"]:
+                if sql_upper[i : i + len(op)] == op:
                     # Check it's a word boundary (not part of another word)
-                    if (i == 0 or not sql_upper[i-1].isalnum()) and \
-                       (i+len(op) >= len(sql_upper) or not sql_upper[i+len(op)].isalnum()):
+                    if (i == 0 or not sql_upper[i - 1].isalnum()) and (
+                        i + len(op) >= len(sql_upper) or not sql_upper[i + len(op)].isalnum()
+                    ):
                         operation_positions.append((i, op))
                         break
 
@@ -2401,7 +2467,7 @@ def _parse_sql_node(sql_str, verbose=False):
         pos, operation = operation_positions[0]
 
         left_sql = sql_str[:pos].strip()
-        right_sql = sql_str[pos+len(operation):].strip()
+        right_sql = sql_str[pos + len(operation) :].strip()
 
         if verbose:
             print(f"   Found {operation} operation")
@@ -2413,32 +2479,21 @@ def _parse_sql_node(sql_str, verbose=False):
         right_node = _parse_sql_node(right_sql, verbose=verbose)
 
         # Build operation node
-        if operation == 'UNION':
+        if operation == "UNION":
             # Union combines multiple queries
             # Collect all queries from left and right
             left_queries = _extract_queries(left_node)
             right_queries = _extract_queries(right_node)
 
-            return {
-                'operation': 'union',
-                'queries': left_queries + right_queries
-            }
+            return {"operation": "union", "queries": left_queries + right_queries}
 
-        elif operation == 'EXCEPT':
+        elif operation == "EXCEPT":
             # Difference: left - right
-            return {
-                'operation': 'difference',
-                'left': left_node,
-                'right': right_node
-            }
+            return {"operation": "difference", "left": left_node, "right": right_node}
 
-        elif operation == 'INTERSECT':
+        elif operation == "INTERSECT":
             # Intersect: common elements
-            return {
-                'operation': 'intersect',
-                'left': left_node,
-                'right': right_node
-            }
+            return {"operation": "intersect", "left": left_node, "right": right_node}
 
     else:
         # No top-level operation - could be:
@@ -2446,8 +2501,9 @@ def _parse_sql_node(sql_str, verbose=False):
         # 2. SELECT * FROM (subquery)
 
         # Check for SELECT * FROM (subquery) pattern first
-        subquery_match = re.search(r"SELECT\s+\*\s+FROM\s+\((.+)\)\s*$",
-                                   sql_str, re.IGNORECASE | re.DOTALL)
+        subquery_match = re.search(
+            r"SELECT\s+\*\s+FROM\s+\((.+)\)\s*$", sql_str, re.IGNORECASE | re.DOTALL
+        )
 
         if subquery_match:
             # This is a subquery - recursively parse it
@@ -2457,20 +2513,21 @@ def _parse_sql_node(sql_str, verbose=False):
             return _parse_sql_node(subquery_sql, verbose=verbose)
 
         # Pattern: SELECT * FROM search("query string")
-        match = re.search(r"SELECT\s+\*\s+FROM\s+search\s*\(\s*['\"]([^'\"]+)['\"]\s*\)",
-                         sql_str, re.IGNORECASE)
+        match = re.search(
+            r"SELECT\s+\*\s+FROM\s+search\s*\(\s*['\"]([^'\"]+)['\"]\s*\)", sql_str, re.IGNORECASE
+        )
 
         if not match:
-            raise ValueError(f"Invalid SQL syntax. Expected: SELECT * FROM search(\"query\") or SELECT * FROM (subquery). Got: {sql_str[:100]}")
+            raise ValueError(
+                f'Invalid SQL syntax. Expected: SELECT * FROM search("query") or SELECT * FROM (subquery). Got: {sql_str[:100]}'
+            )
 
         query_string = match.group(1)
 
         if verbose:
             print(f"   Simple query: '{query_string}'")
 
-        return {
-            'query': query_string
-        }
+        return {"query": query_string}
 
 
 def _extract_queries(node):
@@ -2484,16 +2541,16 @@ def _extract_queries(node):
     Returns:
         list: List of query strings
     """
-    if 'query' in node:
+    if "query" in node:
         # Simple query node
-        return [node['query']]
-    elif 'operation' in node and node['operation'] == 'union' and 'queries' in node:
+        return [node["query"]]
+    elif "operation" in node and node["operation"] == "union" and "queries" in node:
         # Already a union with queries list
-        return node['queries']
-    elif 'operation' in node and node['operation'] == 'union':
+        return node["queries"]
+    elif "operation" in node and node["operation"] == "union":
         # Union with left/right nodes
-        left_queries = _extract_queries(node.get('left', {}))
-        right_queries = _extract_queries(node.get('right', {}))
+        left_queries = _extract_queries(node.get("left", {}))
+        right_queries = _extract_queries(node.get("right", {}))
         return left_queries + right_queries
     else:
         # Complex operation - return as nested node
