@@ -1335,3 +1335,118 @@ def extract_relevant_content(
         'score_range': score_range,
         'sources': list(results_by_source.keys())
     }
+
+###############################################################################
+# BOOLEAN LOGIC OPERATIONS
+###############################################################################
+
+def _chunk_to_key(chunk_result):
+    """
+    Convert a chunk result to a hashable key for set operations.
+
+    Chunk identity is defined by (corpus, location) tuple.
+
+    Args:
+        chunk_result: Dict with 'corpus' and 'location' keys
+
+    Returns:
+        tuple: (corpus, location) as hashable key
+    """
+    return (chunk_result['corpus'], chunk_result['location'])
+
+def union_results(result_sets):
+    """
+    Perform set union on multiple result sets.
+
+    For duplicate chunks (same corpus and location), keeps the one with the highest score.
+
+    Args:
+        result_sets: List of result lists, where each result is a dict with:
+                    {'corpus', 'location', 'score', 'chunk', ...}
+
+    Returns:
+        list: Combined results with duplicates removed (highest score preserved)
+    """
+    if not result_sets:
+        return []
+
+    # Build dict mapping chunk key to best result
+    combined = {}
+
+    for result_set in result_sets:
+        for result in result_set:
+            key = _chunk_to_key(result)
+
+            # Keep the result with the highest score
+            if key not in combined or result['score'] > combined[key]['score']:
+                combined[key] = result
+
+    # Return as list
+    return list(combined.values())
+
+def difference_results(set_a, set_b, semantic=False, threshold=0.7):
+    """
+    Perform set difference: A - B (items in A but not in B).
+
+    Args:
+        set_a: List of results to keep from
+        set_b: List of results to exclude
+        semantic: If True, use semantic similarity for exclusion (not just exact match)
+        threshold: Similarity threshold for semantic exclusion (0.0-1.0)
+
+    Returns:
+        list: Results from set_a that don't appear in set_b
+    """
+    if not set_a:
+        return []
+
+    if not set_b:
+        return set_a
+
+    # Exact matching (Level 1)
+    if not semantic:
+        # Build set of keys to exclude
+        exclude_keys = {_chunk_to_key(result) for result in set_b}
+
+        # Return items not in exclude set
+        return [result for result in set_a if _chunk_to_key(result) not in exclude_keys]
+
+    # Semantic matching (Level 2) - placeholder for Task 5
+    # For now, fall back to exact matching
+    # TODO: Implement semantic filtering in Task 5
+    exclude_keys = {_chunk_to_key(result) for result in set_b}
+    return [result for result in set_a if _chunk_to_key(result) not in exclude_keys]
+
+def intersect_results(set_a, set_b):
+    """
+    Perform set intersection: A ∩ B (items in both A and B).
+
+    For overlapping chunks, keeps the one with the highest score.
+
+    Args:
+        set_a: First list of results
+        set_b: Second list of results
+
+    Returns:
+        list: Results that appear in both sets (highest score preserved)
+    """
+    if not set_a or not set_b:
+        return []
+
+    # Build dicts for both sets
+    dict_a = {_chunk_to_key(result): result for result in set_a}
+    dict_b = {_chunk_to_key(result): result for result in set_b}
+
+    # Find intersection keys
+    intersect_keys = dict_a.keys() & dict_b.keys()
+
+    # Return results with highest scores
+    results = []
+    for key in intersect_keys:
+        # Pick the result with higher score
+        if dict_a[key]['score'] >= dict_b[key]['score']:
+            results.append(dict_a[key])
+        else:
+            results.append(dict_b[key])
+
+    return results
