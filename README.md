@@ -183,6 +183,36 @@ See [EXTRACTION_GUIDE.md](EXTRACTION_GUIDE.md) for detailed usage patterns.
 
 **Organize corpuses by:** project, type (code/docs/specs), domain (backend/frontend), or version (v1/v2).
 
+### 5. Boolean Query Operations (New!)
+**SQL-like operations** for advanced filtering - combine topics, exclude unwanted content:
+
+```bash
+# Exclude specific topics
+sear search "physics lessons" --exclude "mechanics"
+
+# Union: combine multiple targeted queries
+sear search "thermodynamics, quantum, electromagnetism" --union
+
+# Complex: (A OR B) - C
+sear search "security, authentication" --union --exclude "deprecated, legacy"
+
+# Semantic exclusion: content-based filtering
+sear search "physics" --exclude "mechanics" --semantic --threshold 0.7
+```
+
+**Boolean Operations:**
+- **Union (OR)**: Combine results from multiple targeted queries
+- **Difference (-)**: Exclude unwanted topics from results
+- **Semantic filtering**: Content-based exclusion using embedding similarity
+
+**Why Boolean Queries?**
+- **Precise control**: Get physics WITHOUT mechanics, not just "physics"
+- **Efficient**: O(n) set-based operations with document order preservation
+- **Flexible**: Works for both `search` (LLM) and `extract` (raw content)
+- **Deterministic**: Same query always returns same results
+
+**See [BOOLEAN_QUERIES.md](BOOLEAN_QUERIES.md) for complete guide with examples, JSON format, and best practices.**
+
 ## Architecture
 
 **Two-Stage RAG Pipeline:**

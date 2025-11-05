@@ -1,6 +1,164 @@
-# Extracted Content for Query: system
-# Total chunks: 0
-# Excluded: HVAC
+# Extracted Content for Query: API endpoints
+# Total chunks: 7
+# Excluded: documentation
 
 ================================================================================
+
+## Chunk 1 from gitingest
+Location: gitingest-docs.txt:4060-4080
+Score: 0.413
+
+        return url
+
+    parsed = urlparse(url)
+    # Add token as username in URL (GitHub supports this)
+    netloc = f"x-oauth-basic:{token}@{parsed.hostname}"
+    if parsed.port:
+        netloc += f":{parsed.port}"
+
+    return urlunparse(
+        (
+            parsed.scheme,
+            netloc,
+            parsed.path,
+            parsed.params,
+            parsed.query,
+            parsed.fragment,
+        ),
+    )
+
+
+@contextmanager
+
+--------------------------------------------------------------------------------
+
+## Chunk 2 from gitingest
+Location: gitingest-docs.txt:5604-5611
+Score: 0.444
+
+@app.get("/docs", response_class=HTMLResponse, include_in_schema=False)
+async def custom_swagger_ui(request: Request) -> HTMLResponse:
+    """Serve custom Swagger UI documentation.
+
+    **This endpoint serves a custom Swagger UI interface**
+    for the API documentation, providing an interactive way to explore
+    and test the available endpoints.
+
+
+--------------------------------------------------------------------------------
+
+## Chunk 3 from gitingest
+Location: gitingest-docs.txt:5630-5666
+Score: 0.628
+
+    **This endpoint returns the OpenAPI schema (openapi.json)**
+    that describes the API structure, endpoints, and data models
+    for documentation and client generation purposes.
+
+    **Returns**
+
+    - **JSONResponse**: The OpenAPI schema as JSON
+
+    """
+    return JSONResponse(app.openapi())
+
+
+@app.api_route("/api", methods=["POST", "PUT", "DELETE", "OPTIONS", "HEAD"], include_in_schema=False)
+@app.api_route("/api/", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"], include_in_schema=False)
+def openapi_json() -> JSONResponse:
+    """Return the OpenAPI schema for various HTTP methods.
+
+    **This endpoint returns the OpenAPI schema (openapi.json)**
+    for multiple HTTP methods, providing API documentation
+    for clients that may use different request methods.
+
+    **Returns**
+
+    - **JSONResponse**: The OpenAPI schema as JSON
+
+    """
+    return JSONResponse(app.openapi())
+
+
+# Include routers for modular endpoints
+app.include_router(index)
+app.include_router(ingest)
+app.include_router(dynamic)
+
+
+
+================================================
+
+--------------------------------------------------------------------------------
+
+## Chunk 4 from gitingest
+Location: gitingest-docs.txt:5694-5709
+Score: 0.433
+
+    This endpoint is only accessible from the local network.
+
+    Returns
+    -------
+    HTMLResponse
+        Prometheus metrics in text format
+
+    """
+    return HTMLResponse(
+        content=generate_latest(REGISTRY),
+        status_code=200,
+        media_type="text/plain",
+    )
+
+
+def start_metrics_server(host: str = "127.0.0.1", port: int = 9090) -> None:
+
+--------------------------------------------------------------------------------
+
+## Chunk 5 from gitingest
+Location: gitingest-docs.txt:5840-5853
+Score: 0.371
+
+    pattern_type: str = Field(..., description="Pattern type used")
+    pattern: str = Field(..., description="Pattern used")
+
+
+class IngestErrorResponse(BaseModel):
+    """Error response model for the /api/ingest endpoint.
+
+    Attributes
+    ----------
+    error : str
+        Error message describing what went wrong.
+
+    """
+
+
+--------------------------------------------------------------------------------
+
+## Chunk 6 from gitingest
+Location: gitingest-docs.txt:7259-7266
+Score: 0.402
+
+from fastapi import APIRouter, HTTPException, Request, status
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from prometheus_client import Counter
+
+from gitingest.config import TMP_BASE_PATH
+from server.models import IngestRequest
+from server.routers_utils import COMMON_INGEST_RESPONSES, _perform_ingestion
+from server.s3_utils import is_s3_enabled
+
+--------------------------------------------------------------------------------
+
+## Chunk 7 from gitingest
+Location: gitingest-docs.txt:7280-7284
+Score: 0.408
+
+) -> JSONResponse:
+    """Ingest a Git repository and return processed content.
+
+    **This endpoint processes a Git repository by cloning it, analyzing its structure,**
+    and returning a summary with the repository's content. The response includes
+
+--------------------------------------------------------------------------------
 
