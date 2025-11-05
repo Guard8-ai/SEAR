@@ -104,7 +104,7 @@ Answer:"""
         'filtered_count': 0
     }
 
-def build_boolean_query(query, exclude=None, union=False, corpuses=None, min_score=0.3, max_chunks=None):
+def build_boolean_query(query, exclude=None, union=False, corpuses=None, min_score=0.3, max_chunks=None, semantic=False, threshold=0.7):
     """
     Convert CLI boolean arguments to JSON query format for execute_query().
 
@@ -115,6 +115,8 @@ def build_boolean_query(query, exclude=None, union=False, corpuses=None, min_sco
         corpuses: List of corpus names to search
         min_score: Minimum similarity score threshold
         max_chunks: Maximum number of chunks to return
+        semantic: If True, use semantic similarity for exclusion
+        threshold: Similarity threshold for semantic exclusion (0.0-1.0)
 
     Returns:
         dict: JSON query specification for execute_query()
@@ -135,6 +137,10 @@ def build_boolean_query(query, exclude=None, union=False, corpuses=None, min_sco
         # Complex: "thermo, quantum" --union --exclude "deprecated"
         >>> build_boolean_query("thermo, quantum", exclude="deprecated", union=True)
         {"operation": "difference", "left": {"operation": "union", "queries": [...]}, "right": {...}, ...}
+
+        # Semantic exclusion: "physics" --exclude "mechanics" --semantic --threshold 0.75
+        >>> build_boolean_query("physics", exclude="mechanics", semantic=True, threshold=0.75)
+        {"operation": "difference", "query": "physics", "exclude": "mechanics", "semantic": True, "threshold": 0.75, ...}
     """
     # Base options
     query_spec = {
@@ -180,6 +186,10 @@ def build_boolean_query(query, exclude=None, union=False, corpuses=None, min_sco
         query_spec['operation'] = 'difference'
         query_spec['left'] = main_query
         query_spec['right'] = exclude_query
+        # Add semantic filtering options if enabled
+        if semantic:
+            query_spec['semantic'] = True
+            query_spec['threshold'] = threshold
     else:
         # No exclusion: use main query directly
         query_spec.update(main_query)
@@ -448,7 +458,9 @@ Library Usage:
                     union=use_union,
                     corpuses=corpuses,
                     min_score=0.3,  # Use default for search
-                    max_chunks=None
+                    max_chunks=None,
+                    semantic=use_semantic,
+                    threshold=semantic_threshold
                 )
 
                 # Execute boolean query to get filtered chunks
@@ -572,7 +584,9 @@ Library Usage:
                     union=use_union,
                     corpuses=corpuses,
                     min_score=min_score,
-                    max_chunks=max_chunks
+                    max_chunks=max_chunks,
+                    semantic=use_semantic,
+                    threshold=semantic_threshold
                 )
 
                 # Execute boolean query to get filtered chunks

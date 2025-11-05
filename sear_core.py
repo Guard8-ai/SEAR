@@ -1411,11 +1411,79 @@ def difference_results(set_a, set_b, semantic=False, threshold=0.7):
         # Return items not in exclude set
         return [result for result in set_a if _chunk_to_key(result) not in exclude_keys]
 
-    # Semantic matching (Level 2) - placeholder for Task 5
-    # For now, fall back to exact matching
-    # TODO: Implement semantic filtering in Task 5
+    # Semantic matching (Level 2)
+    # First, apply exact exclusion (fast path for identical chunks)
     exclude_keys = {_chunk_to_key(result) for result in set_b}
-    return [result for result in set_a if _chunk_to_key(result) not in exclude_keys]
+    remaining = [result for result in set_a if _chunk_to_key(result) not in exclude_keys]
+
+    if not remaining or not set_b:
+        return remaining
+
+    # Now apply semantic exclusion by comparing embeddings from FAISS
+    # Group chunks by corpus to load FAISS indices efficiently
+    corpus_indices = {}  # corpus_name -> FAISS index
+
+    try:
+        # Load FAISS indices for all corpuses involved
+        all_corpuses = set()
+        for result in remaining:
+            all_corpuses.add(result['corpus'])
+        for result in set_b:
+            all_corpuses.add(result['corpus'])
+
+        for corpus_name in all_corpuses:
+            paths = get_corpus_paths(corpus_name)
+            corpus_indices[corpus_name] = faiss.read_index(str(paths['index']))
+
+        # Extract embeddings for exclusion set (set_b)
+        exclude_embeddings = []
+        for result in set_b:
+            corpus_name = result['corpus']
+            chunk_idx = result.get('chunk_index')
+            if chunk_idx is not None and corpus_name in corpus_indices:
+                # Retrieve embedding from FAISS index using reconstruct()
+                index = corpus_indices[corpus_name]
+                embedding = index.reconstruct(int(chunk_idx))
+                exclude_embeddings.append(embedding)
+
+        if not exclude_embeddings:
+            # No embeddings available, return remaining with exact matching only
+            return remaining
+
+        # Convert to numpy array for efficient computation
+        exclude_embeddings = np.array(exclude_embeddings).astype('float32')
+
+        # Filter remaining chunks by semantic similarity
+        filtered_results = []
+        for result in remaining:
+            corpus_name = result['corpus']
+            chunk_idx = result.get('chunk_index')
+
+            if chunk_idx is None or corpus_name not in corpus_indices:
+                # Can't get embedding, keep the chunk (conservative approach)
+                filtered_results.append(result)
+                continue
+
+            # Retrieve embedding for this chunk from FAISS
+            index = corpus_indices[corpus_name]
+            chunk_embedding = index.reconstruct(int(chunk_idx))
+            chunk_embedding = np.array(chunk_embedding).astype('float32')
+
+            # Calculate cosine similarity with all exclusion embeddings
+            # Embeddings are already normalized (we use IndexFlatIP with normalized vectors)
+            similarities = np.dot(exclude_embeddings, chunk_embedding)
+            max_similarity = float(np.max(similarities))
+
+            # Keep chunk only if it's not too similar to any exclusion chunk
+            if max_similarity < threshold:
+                filtered_results.append(result)
+
+        return filtered_results
+
+    except Exception as e:
+        # If semantic filtering fails, fall back to exact matching
+        print(f"⚠️  Semantic filtering failed: {e}. Using exact matching only.")
+        return remaining
 
 def intersect_results(set_a, set_b):
     """
@@ -2021,10 +2089,13 @@ def execute_query(query_spec, use_gpu=None, verbose=False):
                 )
 
             # Apply difference operation
-            result = difference_results(left_results, right_results)
+            semantic = query_spec.get('semantic', False)
+            threshold = query_spec.get('threshold', 0.7)
+            result = difference_results(left_results, right_results, semantic=semantic, threshold=threshold)
 
             if verbose:
-                print(f"{indent}  ✓ Difference result: {len(result)} chunks")
+                semantic_msg = f" (semantic, threshold={threshold})" if semantic else ""
+                print(f"{indent}  ✓ Difference result: {len(result)} chunks{semantic_msg}")
 
             return result
 
