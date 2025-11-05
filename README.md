@@ -1,5 +1,12 @@
 # SEAR: Summarization-Enhanced Augmented Retrieval
 
+[![Tests](https://img.shields.io/badge/tests-44%20passing-success)](tests/)
+[![Coverage](https://img.shields.io/badge/coverage-68%25-yellow)](tests/)
+[![Code Style](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![Linting](https://img.shields.io/badge/linting-ruff-blue)](https://github.com/astral-sh/ruff)
+[![Python](https://img.shields.io/badge/python-3.9%2B-blue)](pyproject.toml)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
 **Multi-corpus RAG with FAISS retrieval → LLM summarization. 100% deterministic, line-level source tracking, zero cost.**
 
 ```
