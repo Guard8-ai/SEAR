@@ -99,9 +99,9 @@ python sear.py extract "promises, async await, callbacks" --union --output async
 ```
 
 **How it works**:
-- Executes separate FAISS searches for each topic
+- Executes separate searches for each topic
 - Combines results using set union
-- Deduplicates by `(corpus, location)` key
+- Deduplicates by location
 - Preserves highest score for duplicates
 
 ### 2. Difference (Exclusion)
@@ -120,13 +120,13 @@ python sear.py search "physics lessons" --exclude "mechanics"
 **Two levels of matching**:
 
 **Level 1 - Exact matching (default, fast)**:
-- Removes chunks with identical `(corpus, location)`
+- Removes chunks with identical locations
 - Pure set operations, O(n)
 - Use for: basic filtering, distinct topics
 
 **Level 2 - Semantic matching (optional, thorough)**:
 - Removes chunks semantically similar to exclusion set
-- Compares embedding similarity using FAISS
+- Compares content similarity using embeddings
 - Use for: overlapping topics (e.g., physics vs mechanics)
 
 ```bash
@@ -191,10 +191,9 @@ python sear.py search "physics" --exclude "mechanics" --semantic --threshold 0.6
 ### How It Works
 
 1. Execute exact exclusion first (fast path)
-2. Load FAISS indices for involved corpuses
-3. Retrieve embeddings using `index.reconstruct()`
-4. Calculate cosine similarity between remaining chunks and exclusion set
-5. Keep only chunks below threshold
+2. Load embeddings for involved corpuses
+3. Calculate similarity between remaining chunks and exclusion set
+4. Keep only chunks below threshold
 
 **Performance**: O(n×m) where n=remaining chunks, m=exclusion chunks
 
@@ -360,7 +359,6 @@ results = execute_query(query_spec, verbose=True)
 # - location: file:line-line
 # - score: similarity score
 # - chunk: content text
-# - chunk_index: index in FAISS
 ```
 
 ---
@@ -585,5 +583,3 @@ python sear.py search "query" --exclude "topic" --semantic --threshold 0.6
 ## Feedback & Support
 
 Found a bug or have a feature request? Open an issue on GitHub.
-
-**Design rationale**: See `~/Downloads/SEAR_BOOLEAN_LOGIC_DESIGN.md` for detailed architecture decisions and implementation notes.
