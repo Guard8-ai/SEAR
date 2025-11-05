@@ -45,10 +45,6 @@ coverage.xml
 *.cover
 .pytest_cache/
 
-# Project-specific artifacts
-claude-code.txt
-gitingest-docs.txt
-
 # FAISS index files
 faiss_indices/
 *.index
@@ -78,3 +74,10 @@ Thumbs.db
 # Environment files
 .env
 .env.local
+
+# Ignore generated .txt files, but keep specific ones
+extracted_*.txt
+test_*.txt
+!requirements*.txt
+!gitingest-docs.txt
+!claude-code.txt

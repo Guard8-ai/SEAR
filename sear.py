@@ -18,7 +18,10 @@ from sear_core import (
     get_corpus_info,
     delete_corpus,
     is_gpu_available,
-    get_gpu_info
+    get_gpu_info,
+    execute_query,
+    ollama_generate,
+    anthropic_generate
 )
 
 # Optional document converter support
@@ -29,6 +32,170 @@ except ImportError:
     CONVERTER_AVAILABLE = False
     DOCX_AVAILABLE = False
 
+def send_chunks_to_llm(chunks, query, temperature=0.0, provider='ollama', api_key=None, verbose=True):
+    """
+    Send filtered chunks to LLM for answer generation.
+
+    Args:
+        chunks: List of chunk dicts with keys: corpus, location, score, chunk
+        query: Original query string
+        temperature: LLM temperature
+        provider: 'ollama' or 'anthropic'
+        api_key: API key for Anthropic
+        verbose: Print progress
+
+    Returns:
+        dict: Response with answer and sources
+    """
+    if not chunks:
+        if verbose:
+            print("❌ No chunks found matching the query")
+        return {
+            'answer': 'No results found matching your query.',
+            'sources': [],
+            'quality_results': 0,
+            'filtered_count': 0
+        }
+
+    if verbose:
+        print(f"🤖 Generating answer from {len(chunks)} results...")
+
+    # Build context from chunks
+    context = f"Question: {query}\n\n"
+    for i, r in enumerate(chunks, 1):
+        context += f"Source {i} from {r['corpus']} ({r['location']}):\n{r['chunk']}\n\n"
+
+    prompt = f"""{context}
+Based ONLY on the sources above, answer the question with precision and accuracy.
+
+Instructions:
+- Use specific facts, numbers, and quotes from the sources
+- If sources contain contradictory information, acknowledge it
+- If sources don't contain enough information to answer, state what's missing
+- Keep your answer focused and fact-based
+- Do not add information not present in the sources
+
+Answer:"""
+
+    # Generate answer
+    if provider == 'anthropic':
+        answer = anthropic_generate(prompt, temperature=temperature, api_key=api_key)
+    else:
+        answer = ollama_generate(prompt, temperature=temperature)
+
+    if verbose:
+        print("\n" + "="*80)
+        print("ANSWER")
+        print("="*80)
+        print(answer)
+        print("\n" + "="*80)
+        print("SOURCES")
+        print("="*80)
+        for i, result in enumerate(chunks, 1):
+            print(f"{i}. [{result['corpus']}] {result['location']} (score: {result['score']:.3f})")
+            print(f"   {result['chunk'][:200]}...")
+            print()
+        print("="*80)
+
+    return {
+        'answer': answer,
+        'sources': chunks,
+        'quality_results': len(chunks),
+        'filtered_count': 0
+    }
+
+def build_boolean_query(query, exclude=None, union=False, corpuses=None, min_score=0.3, max_chunks=None, semantic=False, threshold=0.7):
+    """
+    Convert CLI boolean arguments to JSON query format for execute_query().
+
+    Args:
+        query: Main query string (may contain commas if union=True)
+        exclude: Optional exclusion query string (may contain commas)
+        union: If True, split query by commas and create union operation
+        corpuses: List of corpus names to search
+        min_score: Minimum similarity score threshold
+        max_chunks: Maximum number of chunks to return
+        semantic: If True, use semantic similarity for exclusion
+        threshold: Similarity threshold for semantic exclusion (0.0-1.0)
+
+    Returns:
+        dict: JSON query specification for execute_query()
+
+    Examples:
+        # Simple query: "physics lessons"
+        >>> build_boolean_query("physics lessons")
+        {"query": "physics lessons", "min_score": 0.3, ...}
+
+        # Union: "thermo, quantum, EM" --union
+        >>> build_boolean_query("thermo, quantum, EM", union=True)
+        {"operation": "union", "queries": ["thermo", "quantum", "EM"], ...}
+
+        # Difference: "physics" --exclude "mechanics"
+        >>> build_boolean_query("physics", exclude="mechanics")
+        {"operation": "difference", "query": "physics", "exclude": "mechanics", ...}
+
+        # Complex: "thermo, quantum" --union --exclude "deprecated"
+        >>> build_boolean_query("thermo, quantum", exclude="deprecated", union=True)
+        {"operation": "difference", "left": {"operation": "union", "queries": [...]}, "right": {...}, ...}
+
+        # Semantic exclusion: "physics" --exclude "mechanics" --semantic --threshold 0.75
+        >>> build_boolean_query("physics", exclude="mechanics", semantic=True, threshold=0.75)
+        {"operation": "difference", "query": "physics", "exclude": "mechanics", "semantic": True, "threshold": 0.75, ...}
+    """
+    # Base options
+    query_spec = {
+        'min_score': min_score,
+        'sort': True,
+        'merge_adjacent': True
+    }
+
+    if corpuses:
+        query_spec['corpuses'] = corpuses
+    if max_chunks:
+        query_spec['max_results'] = max_chunks
+
+    # Parse main query (handle union flag)
+    if union:
+        # Split by comma and strip whitespace
+        queries = [q.strip() for q in query.split(',') if q.strip()]
+        if len(queries) < 2:
+            raise ValueError("Union requires at least 2 comma-separated queries")
+        main_query = {
+            'operation': 'union',
+            'queries': queries
+        }
+    else:
+        # Simple query
+        main_query = {'query': query}
+
+    # Parse exclusion (handle multiple exclusions)
+    if exclude:
+        exclude_queries = [q.strip() for q in exclude.split(',') if q.strip()]
+
+        if len(exclude_queries) == 1:
+            # Single exclusion
+            exclude_query = {'query': exclude_queries[0]}
+        else:
+            # Multiple exclusions: union them first
+            exclude_query = {
+                'operation': 'union',
+                'queries': exclude_queries
+            }
+
+        # Build difference operation
+        query_spec['operation'] = 'difference'
+        query_spec['left'] = main_query
+        query_spec['right'] = exclude_query
+        # Add semantic filtering options if enabled
+        if semantic:
+            query_spec['semantic'] = True
+            query_spec['threshold'] = threshold
+    else:
+        # No exclusion: use main query directly
+        query_spec.update(main_query)
+
+    return query_spec
+
 def main():
     if len(sys.argv) < 2:
         print("""
@@ -37,8 +204,8 @@ SEAR: Summarization-Enhanced Augmented Retrieval
 
 Usage:
   python sear.py index <file.txt> [corpus-name] [--gpu|--no-gpu]
-  python sear.py search "query" [--corpus name1,name2,...] [--temperature 0.0-1.0] [--provider ollama|anthropic] [--api-key KEY] [--gpu|--no-gpu]
-  python sear.py extract "query" [--output file.txt] [--corpus name1,name2,...] [--min-score 0.3] [--max-chunks N] [--gpu|--no-gpu]
+  python sear.py search "query" [--corpus name1,name2,...] [--exclude "query"] [--union] [--semantic] [--threshold 0.7] [--temperature 0.0-1.0] [--provider ollama|anthropic] [--api-key KEY] [--gpu|--no-gpu]
+  python sear.py extract "query" [--output file.txt] [--corpus name1,name2,...] [--exclude "query"] [--union] [--semantic] [--threshold 0.7] [--min-score 0.3] [--max-chunks N] [--gpu|--no-gpu]
   python sear.py convert <file.pdf|file.docx> [--output-dir DIR] [--no-normalize] [--force-ocr] [--lang heb|eng|heb+eng]
   python sear.py list
   python sear.py delete <corpus-name>
@@ -52,6 +219,10 @@ Commands:
 
   search    Search across corpuses (defaults to ALL)
             Use --corpus flag to search specific corpuses only
+            Use --exclude to exclude matching topics (e.g., "physics" --exclude "mechanics")
+            Use --union to combine comma-separated queries (e.g., "thermo, quantum, EM" --union)
+            Use --semantic to enable semantic exclusion (checks content similarity, not just exact matches)
+            Use --threshold to set semantic similarity threshold (default: 0.7, requires --semantic)
             Use --temperature flag to control LLM creativity (0.0=deterministic, default)
             Use --provider to select LLM (ollama=default, anthropic=Claude 3.5 Sonnet 4.5)
             Use --api-key to provide Anthropic API key (or set ANTHROPIC_API_KEY env var)
@@ -62,6 +233,10 @@ Commands:
             Does NOT send to LLM - just extracts and saves raw content
             Use --output to specify output file (default: extracted_content.txt)
             Use --corpus flag to extract from specific corpuses only
+            Use --exclude to exclude matching topics (e.g., "physics" --exclude "mechanics")
+            Use --union to combine comma-separated queries (e.g., "thermo, quantum, EM" --union)
+            Use --semantic to enable semantic exclusion (checks content similarity, not just exact matches)
+            Use --threshold to set semantic similarity threshold (default: 0.7, requires --semantic)
             Use --min-score to set similarity threshold (default: 0.3)
             Use --max-chunks to limit total chunks extracted
             Use --gpu to force GPU acceleration
@@ -97,6 +272,16 @@ Examples:
   # Search specific corpuses
   python sear.py search "git workflow" --corpus my-code,project-docs
 
+  # Boolean search: exclude topics
+  python sear.py search "physics lessons" --exclude "mechanics"
+  python sear.py search "physics" --exclude "mechanics, optics" --semantic --threshold 0.75
+
+  # Boolean search: union of topics
+  python sear.py search "thermodynamics, quantum mechanics, electromagnetism" --union
+
+  # Boolean search: complex queries (union + exclusion)
+  python sear.py search "security, authentication" --union --exclude "deprecated, legacy"
+
   # Search with higher temperature for creative answers
   python sear.py search "what could go wrong?" --temperature 0.7
 
@@ -111,6 +296,12 @@ Examples:
   python sear.py extract "testing methodologies" --output testing_guide.txt
   python sear.py extract "neural networks" --corpus ml-corpus --min-score 0.4
   python sear.py extract "security audit" --max-chunks 200 --gpu
+
+  # Boolean extract: exclude topics
+  python sear.py extract "physics" --exclude "mechanics" --output physics_no_mechanics.txt
+
+  # Boolean extract: union of topics
+  python sear.py extract "thermo, quantum, EM" --union --output topics.txt
 
   # Convert documents to markdown (then index them)
   python sear.py convert document.pdf
@@ -165,13 +356,17 @@ Library Usage:
     elif cmd == "search":
         if len(sys.argv) < 3:
             print("❌ Error: Missing search query")
-            print("Usage: python sear.py search \"query\" [--corpus name1,name2,...] [--temperature 0.0-1.0] [--provider ollama|anthropic] [--api-key KEY] [--gpu|--no-gpu]")
+            print("Usage: python sear.py search \"query\" [--corpus name1,name2,...] [--exclude \"query\"] [--union] [--semantic] [--threshold 0.7] [--temperature 0.0-1.0] [--provider ollama|anthropic] [--api-key KEY] [--gpu|--no-gpu]")
             sys.exit(1)
 
         # Parse arguments
         args = sys.argv[2:]
         query_parts = []
         corpuses = None
+        exclude_query = None
+        use_union = False
+        use_semantic = False
+        semantic_threshold = 0.7
         temperature = 0.0
         use_gpu = None
         provider = 'ollama'
@@ -184,6 +379,31 @@ Library Usage:
                     print("❌ Error: --corpus flag requires corpus names")
                     sys.exit(1)
                 corpuses = args[i + 1].split(',')
+                i += 2
+            elif args[i] == "--exclude":
+                if i + 1 >= len(args):
+                    print("❌ Error: --exclude flag requires an exclusion query")
+                    sys.exit(1)
+                exclude_query = args[i + 1]
+                i += 2
+            elif args[i] == "--union":
+                use_union = True
+                i += 1
+            elif args[i] == "--semantic":
+                use_semantic = True
+                i += 1
+            elif args[i] == "--threshold":
+                if i + 1 >= len(args):
+                    print("❌ Error: --threshold flag requires a value (0.0-1.0)")
+                    sys.exit(1)
+                try:
+                    semantic_threshold = float(args[i + 1])
+                    if not 0.0 <= semantic_threshold <= 1.0:
+                        print("❌ Error: threshold must be between 0.0 and 1.0")
+                        sys.exit(1)
+                except ValueError:
+                    print(f"❌ Error: invalid threshold value '{args[i + 1]}' (must be a number)")
+                    sys.exit(1)
                 i += 2
             elif args[i] == "--temperature":
                 if i + 1 >= len(args):
@@ -229,7 +449,28 @@ Library Usage:
             sys.exit(1)
 
         try:
-            search(query, corpuses=corpuses, temperature=temperature, use_gpu=use_gpu, provider=provider, api_key=api_key)
+            # Check if we need to use boolean query logic
+            if exclude_query or use_union:
+                # Build boolean query JSON
+                query_spec = build_boolean_query(
+                    query=query,
+                    exclude=exclude_query,
+                    union=use_union,
+                    corpuses=corpuses,
+                    min_score=0.3,  # Use default for search
+                    max_chunks=None,
+                    semantic=use_semantic,
+                    threshold=semantic_threshold
+                )
+
+                # Execute boolean query to get filtered chunks
+                chunks = execute_query(query_spec, use_gpu=use_gpu, verbose=True)
+
+                # Send filtered chunks to LLM for answer generation
+                send_chunks_to_llm(chunks, query, temperature=temperature, provider=provider, api_key=api_key, verbose=True)
+            else:
+                # Standard search without boolean operations
+                search(query, corpuses=corpuses, temperature=temperature, use_gpu=use_gpu, provider=provider, api_key=api_key)
         except (FileNotFoundError, ValueError) as e:
             print(f"❌ Error: {e}")
             sys.exit(1)
@@ -237,7 +478,7 @@ Library Usage:
     elif cmd == "extract":
         if len(sys.argv) < 3:
             print("❌ Error: Missing search query")
-            print("Usage: python sear.py extract \"query\" [--output file.txt] [--corpus name1,name2,...] [--min-score 0.3] [--max-chunks N] [--gpu|--no-gpu]")
+            print("Usage: python sear.py extract \"query\" [--output file.txt] [--corpus name1,name2,...] [--exclude \"query\"] [--union] [--semantic] [--threshold 0.7] [--min-score 0.3] [--max-chunks N] [--gpu|--no-gpu]")
             sys.exit(1)
 
         # Parse arguments
@@ -245,6 +486,10 @@ Library Usage:
         query_parts = []
         corpuses = None
         output_file = None
+        exclude_query = None
+        use_union = False
+        use_semantic = False
+        semantic_threshold = 0.7
         min_score = 0.3
         max_chunks = None
         use_gpu = None
@@ -262,6 +507,31 @@ Library Usage:
                     print("❌ Error: --corpus flag requires corpus names")
                     sys.exit(1)
                 corpuses = args[i + 1].split(',')
+                i += 2
+            elif args[i] == "--exclude":
+                if i + 1 >= len(args):
+                    print("❌ Error: --exclude flag requires an exclusion query")
+                    sys.exit(1)
+                exclude_query = args[i + 1]
+                i += 2
+            elif args[i] == "--union":
+                use_union = True
+                i += 1
+            elif args[i] == "--semantic":
+                use_semantic = True
+                i += 1
+            elif args[i] == "--threshold":
+                if i + 1 >= len(args):
+                    print("❌ Error: --threshold flag requires a value (0.0-1.0)")
+                    sys.exit(1)
+                try:
+                    semantic_threshold = float(args[i + 1])
+                    if not 0.0 <= semantic_threshold <= 1.0:
+                        print("❌ Error: threshold must be between 0.0 and 1.0")
+                        sys.exit(1)
+                except ValueError:
+                    print(f"❌ Error: invalid threshold value '{args[i + 1]}' (must be a number)")
+                    sys.exit(1)
                 i += 2
             elif args[i] == "--min-score":
                 if i + 1 >= len(args):
@@ -305,15 +575,55 @@ Library Usage:
             sys.exit(1)
 
         try:
-            extract_relevant_content(
-                query=query,
-                corpuses=corpuses,
-                output_file=output_file,
-                min_score=min_score,
-                max_chunks=max_chunks,
-                use_gpu=use_gpu,
-                verbose=True
-            )
+            # Check if we need to use boolean query logic
+            if exclude_query or use_union:
+                # Build boolean query JSON
+                query_spec = build_boolean_query(
+                    query=query,
+                    exclude=exclude_query,
+                    union=use_union,
+                    corpuses=corpuses,
+                    min_score=min_score,
+                    max_chunks=max_chunks,
+                    semantic=use_semantic,
+                    threshold=semantic_threshold
+                )
+
+                # Execute boolean query to get filtered chunks
+                chunks = execute_query(query_spec, use_gpu=use_gpu, verbose=True)
+
+                # Write chunks to output file
+                if output_file is None:
+                    output_file = "extracted_content.txt"
+
+                with open(output_file, 'w') as f:
+                    f.write(f"# Extracted Content for Query: {query}\n")
+                    f.write(f"# Total chunks: {len(chunks)}\n")
+                    if exclude_query:
+                        f.write(f"# Excluded: {exclude_query}\n")
+                    if use_union:
+                        f.write(f"# Union mode: enabled\n")
+                    f.write("\n" + "="*80 + "\n\n")
+
+                    for i, chunk in enumerate(chunks, 1):
+                        f.write(f"## Chunk {i} from {chunk['corpus']}\n")
+                        f.write(f"Location: {chunk['location']}\n")
+                        f.write(f"Score: {chunk['score']:.3f}\n\n")
+                        f.write(chunk['chunk'])
+                        f.write("\n\n" + "-"*80 + "\n\n")
+
+                print(f"✅ Extracted {len(chunks)} chunks to: {output_file}")
+            else:
+                # Standard extract without boolean operations
+                extract_relevant_content(
+                    query=query,
+                    corpuses=corpuses,
+                    output_file=output_file,
+                    min_score=min_score,
+                    max_chunks=max_chunks,
+                    use_gpu=use_gpu,
+                    verbose=True
+                )
         except (FileNotFoundError, ValueError) as e:
             print(f"❌ Error: {e}")
             sys.exit(1)

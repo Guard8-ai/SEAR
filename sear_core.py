@@ -1335,3 +1335,804 @@ def extract_relevant_content(
         'score_range': score_range,
         'sources': list(results_by_source.keys())
     }
+
+###############################################################################
+# BOOLEAN LOGIC OPERATIONS
+###############################################################################
+
+def _chunk_to_key(chunk_result):
+    """
+    Convert a chunk result to a hashable key for set operations.
+
+    Chunk identity is defined by (corpus, location) tuple.
+
+    Args:
+        chunk_result: Dict with 'corpus' and 'location' keys
+
+    Returns:
+        tuple: (corpus, location) as hashable key
+    """
+    return (chunk_result['corpus'], chunk_result['location'])
+
+def union_results(result_sets):
+    """
+    Perform set union on multiple result sets.
+
+    For duplicate chunks (same corpus and location), keeps the one with the highest score.
+
+    Args:
+        result_sets: List of result lists, where each result is a dict with:
+                    {'corpus', 'location', 'score', 'chunk', ...}
+
+    Returns:
+        list: Combined results with duplicates removed (highest score preserved)
+    """
+    if not result_sets:
+        return []
+
+    # Build dict mapping chunk key to best result
+    combined = {}
+
+    for result_set in result_sets:
+        for result in result_set:
+            key = _chunk_to_key(result)
+
+            # Keep the result with the highest score
+            if key not in combined or result['score'] > combined[key]['score']:
+                combined[key] = result
+
+    # Return as list
+    return list(combined.values())
+
+def difference_results(set_a, set_b, semantic=False, threshold=0.7):
+    """
+    Perform set difference: A - B (items in A but not in B).
+
+    Args:
+        set_a: List of results to keep from
+        set_b: List of results to exclude
+        semantic: If True, use semantic similarity for exclusion (not just exact match)
+        threshold: Similarity threshold for semantic exclusion (0.0-1.0)
+
+    Returns:
+        list: Results from set_a that don't appear in set_b
+    """
+    if not set_a:
+        return []
+
+    if not set_b:
+        return set_a
+
+    # Exact matching (Level 1)
+    if not semantic:
+        # Build set of keys to exclude
+        exclude_keys = {_chunk_to_key(result) for result in set_b}
+
+        # Return items not in exclude set
+        return [result for result in set_a if _chunk_to_key(result) not in exclude_keys]
+
+    # Semantic matching (Level 2)
+    # First, apply exact exclusion (fast path for identical chunks)
+    exclude_keys = {_chunk_to_key(result) for result in set_b}
+    remaining = [result for result in set_a if _chunk_to_key(result) not in exclude_keys]
+
+    if not remaining or not set_b:
+        return remaining
+
+    # Now apply semantic exclusion by comparing embeddings from FAISS
+    # Group chunks by corpus to load FAISS indices efficiently
+    corpus_indices = {}  # corpus_name -> FAISS index
+
+    try:
+        # Load FAISS indices for all corpuses involved
+        all_corpuses = set()
+        for result in remaining:
+            all_corpuses.add(result['corpus'])
+        for result in set_b:
+            all_corpuses.add(result['corpus'])
+
+        for corpus_name in all_corpuses:
+            paths = get_corpus_paths(corpus_name)
+            corpus_indices[corpus_name] = faiss.read_index(str(paths['index']))
+
+        # Extract embeddings for exclusion set (set_b)
+        exclude_embeddings = []
+        for result in set_b:
+            corpus_name = result['corpus']
+            chunk_idx = result.get('chunk_index')
+            if chunk_idx is not None and corpus_name in corpus_indices:
+                # Retrieve embedding from FAISS index using reconstruct()
+                index = corpus_indices[corpus_name]
+                embedding = index.reconstruct(int(chunk_idx))
+                exclude_embeddings.append(embedding)
+
+        if not exclude_embeddings:
+            # No embeddings available, return remaining with exact matching only
+            return remaining
+
+        # Convert to numpy array for efficient computation
+        exclude_embeddings = np.array(exclude_embeddings).astype('float32')
+
+        # Filter remaining chunks by semantic similarity
+        filtered_results = []
+        for result in remaining:
+            corpus_name = result['corpus']
+            chunk_idx = result.get('chunk_index')
+
+            if chunk_idx is None or corpus_name not in corpus_indices:
+                # Can't get embedding, keep the chunk (conservative approach)
+                filtered_results.append(result)
+                continue
+
+            # Retrieve embedding for this chunk from FAISS
+            index = corpus_indices[corpus_name]
+            chunk_embedding = index.reconstruct(int(chunk_idx))
+            chunk_embedding = np.array(chunk_embedding).astype('float32')
+
+            # Calculate cosine similarity with all exclusion embeddings
+            # Embeddings are already normalized (we use IndexFlatIP with normalized vectors)
+            similarities = np.dot(exclude_embeddings, chunk_embedding)
+            max_similarity = float(np.max(similarities))
+
+            # Keep chunk only if it's not too similar to any exclusion chunk
+            if max_similarity < threshold:
+                filtered_results.append(result)
+
+        return filtered_results
+
+    except Exception as e:
+        # If semantic filtering fails, fall back to exact matching
+        print(f"⚠️  Semantic filtering failed: {e}. Using exact matching only.")
+        return remaining
+
+def intersect_results(set_a, set_b):
+    """
+    Perform set intersection: A ∩ B (items in both A and B).
+
+    For overlapping chunks, keeps the one with the highest score.
+
+    Args:
+        set_a: First list of results
+        set_b: Second list of results
+
+    Returns:
+        list: Results that appear in both sets (highest score preserved)
+    """
+    if not set_a or not set_b:
+        return []
+
+    # Build dicts for both sets
+    dict_a = {_chunk_to_key(result): result for result in set_a}
+    dict_b = {_chunk_to_key(result): result for result in set_b}
+
+    # Find intersection keys
+    intersect_keys = dict_a.keys() & dict_b.keys()
+
+    # Return results with highest scores
+    results = []
+    for key in intersect_keys:
+        # Pick the result with higher score
+        if dict_a[key]['score'] >= dict_b[key]['score']:
+            results.append(dict_a[key])
+        else:
+            results.append(dict_b[key])
+
+    return results
+
+def _parse_location(location_string):
+    """
+    Parse location string to extract filepath and line range.
+
+    Args:
+        location_string: String in format "path/to/file.txt:557-659"
+
+    Returns:
+        tuple: (filepath, start_line, end_line)
+               Returns (location_string, 0, 0) if parsing fails
+
+    Examples:
+        >>> _parse_location("src/main.py:10-20")
+        ('src/main.py', 10, 20)
+        >>> _parse_location("data/file.txt:1-100")
+        ('data/file.txt', 1, 100)
+    """
+    try:
+        # Split on last colon to handle paths with colons
+        if ':' not in location_string:
+            return (location_string, 0, 0)
+
+        # Find the last colon (separates path from line range)
+        last_colon_idx = location_string.rfind(':')
+        filepath = location_string[:last_colon_idx]
+        line_range = location_string[last_colon_idx + 1:]
+
+        # Parse line range "557-659"
+        if '-' not in line_range:
+            return (location_string, 0, 0)
+
+        start_str, end_str = line_range.split('-', 1)
+        start_line = int(start_str)
+        end_line = int(end_str)
+
+        return (filepath, start_line, end_line)
+
+    except (ValueError, AttributeError):
+        # If parsing fails, return original string with 0,0 range
+        return (location_string, 0, 0)
+
+def sort_by_document_order(chunks):
+    """
+    Sort chunks by document order: (corpus, filepath, start_line).
+
+    This ensures chunks appear in natural reading flow within their documents.
+
+    Args:
+        chunks: List of chunk dicts with 'corpus' and 'location' keys
+
+    Returns:
+        list: Chunks sorted by (corpus, filepath, start_line)
+
+    Examples:
+        >>> chunks = [
+        ...     {'corpus': 'docs', 'location': 'file.txt:100-200', 'score': 0.9},
+        ...     {'corpus': 'docs', 'location': 'file.txt:10-50', 'score': 0.8},
+        ...     {'corpus': 'code', 'location': 'main.py:1-10', 'score': 0.7}
+        ... ]
+        >>> sorted_chunks = sort_by_document_order(chunks)
+        >>> sorted_chunks[0]['location']
+        'main.py:1-10'
+    """
+    if not chunks:
+        return []
+
+    def sort_key(chunk):
+        """Extract sort key from chunk."""
+        corpus = chunk.get('corpus', '')
+        location = chunk.get('location', '')
+        filepath, start_line, _ = _parse_location(location)
+        return (corpus, filepath, start_line)
+
+    return sorted(chunks, key=sort_key)
+
+def merge_adjacent_chunks(chunks):
+    """
+    Merge consecutive chunks from the same file with touching or overlapping line ranges.
+
+    Chunks must be sorted by document order first (use sort_by_document_order).
+
+    Args:
+        chunks: List of chunk dicts sorted by document order
+
+    Returns:
+        list: Chunks with adjacent ones merged
+
+    Merging rules:
+        - Same corpus and filepath
+        - Line ranges touch (end_a + 1 >= start_b) or overlap
+        - Keep highest score
+        - Concatenate text with newline separator
+        - Combine line ranges (min start, max end)
+
+    Examples:
+        >>> chunks = [
+        ...     {'corpus': 'docs', 'location': 'f.txt:1-10', 'score': 0.9, 'chunk': 'A'},
+        ...     {'corpus': 'docs', 'location': 'f.txt:11-20', 'score': 0.8, 'chunk': 'B'}
+        ... ]
+        >>> merged = merge_adjacent_chunks(chunks)
+        >>> len(merged)
+        1
+        >>> merged[0]['location']
+        'f.txt:1-20'
+    """
+    if not chunks:
+        return []
+
+    merged = []
+    current = None
+
+    for chunk in chunks:
+        if current is None:
+            # Start with first chunk
+            current = chunk.copy()
+            continue
+
+        # Parse current and new chunk locations
+        curr_corpus = current.get('corpus', '')
+        curr_location = current.get('location', '')
+        curr_filepath, curr_start, curr_end = _parse_location(curr_location)
+
+        new_corpus = chunk.get('corpus', '')
+        new_location = chunk.get('location', '')
+        new_filepath, new_start, new_end = _parse_location(new_location)
+
+        # Check if chunks can be merged
+        same_corpus = curr_corpus == new_corpus
+        same_file = curr_filepath == new_filepath
+        # Lines touch or overlap: end of current + 1 >= start of new
+        lines_adjacent = (curr_end + 1 >= new_start)
+
+        if same_corpus and same_file and lines_adjacent:
+            # Merge chunks
+            # Keep highest score
+            current['score'] = max(current['score'], chunk['score'])
+
+            # Concatenate text
+            current_text = current.get('chunk', '')
+            new_text = chunk.get('chunk', '')
+            current['chunk'] = current_text + '\n' + new_text
+
+            # Combine line ranges: min start, max end
+            merged_start = min(curr_start, new_start)
+            merged_end = max(curr_end, new_end)
+            current['location'] = f"{curr_filepath}:{merged_start}-{merged_end}"
+
+        else:
+            # Cannot merge - save current and start new
+            merged.append(current)
+            current = chunk.copy()
+
+    # Don't forget the last chunk
+    if current is not None:
+        merged.append(current)
+
+    return merged
+
+
+# =============================================================================
+# Task 3: JSON Query Executor
+# =============================================================================
+
+def _retrieve_chunks_only(query, corpuses=None, min_score=0.3, max_results=None, use_gpu=None, verbose=False):
+    """
+    Internal function to retrieve chunks without LLM processing.
+
+    This is a lightweight version of extract_relevant_content that returns
+    chunks directly without writing to file.
+
+    Args:
+        query: Search query string
+        corpuses: List of corpus names to search (None = all)
+        min_score: Minimum similarity threshold (default: 0.3)
+        max_results: Maximum number of results to return (default: None = unlimited)
+        use_gpu: GPU usage (None=auto, True=force, False=disable)
+        verbose: Print progress messages
+
+    Returns:
+        list: List of chunk dicts with keys: corpus, location, score, chunk
+    """
+    # Determine GPU usage
+    if use_gpu is None:
+        use_gpu = GPU_AVAILABLE
+    elif use_gpu and not GPU_AVAILABLE:
+        if verbose:
+            print("⚠️  GPU requested but not available, falling back to CPU")
+        use_gpu = False
+
+    # Determine which corpuses to search
+    if corpuses is None:
+        corpuses = list_corpuses()
+        if not corpuses:
+            raise ValueError("No corpuses available. Please index a file first.")
+
+    # Validate corpus compatibility
+    common_settings = validate_corpus_compatibility(corpuses)
+
+    # Validate query length
+    context_length = common_settings.get('context_length', 256)
+    query_tokens = estimate_tokens(query)
+
+    if query_tokens > context_length:
+        chars_per_token = len(query) / query_tokens if query_tokens > 0 else 4
+        recommended_chars = int(context_length * chars_per_token * 0.9)
+        raise ValueError(
+            f"Query too long ({query_tokens} tokens, max: {context_length}). "
+            f"Please use max ~{recommended_chars} characters."
+        )
+
+    # Load corpus indices
+    corpus_data = []
+    for corpus_name in corpuses:
+        paths = get_corpus_paths(corpus_name)
+
+        # Load FAISS index
+        cpu_index = faiss.read_index(str(paths['index']))
+
+        # Transfer to GPU if enabled
+        if use_gpu:
+            index = index_cpu_to_gpu(cpu_index)
+        else:
+            index = cpu_index
+
+        # Load chunks data
+        with open(paths['chunks'], 'rb') as f:
+            chunks_data = pickle.load(f)
+
+        corpus_data.append({
+            'name': corpus_name,
+            'index': index,
+            'chunks': chunks_data['chunks'],
+            'line_ranges': chunks_data['line_ranges'],
+            'source': chunks_data['source']
+        })
+
+    # Prepare query embedding
+    query_emb = ollama_embed(query)
+    query_emb = np.array([query_emb]).astype('float32')
+
+    # Normalize query if corpuses use normalized embeddings
+    if common_settings.get('normalized', True):
+        faiss.normalize_L2(query_emb)
+
+    # Search all corpuses
+    large_k = 10000 if max_results is None else max_results * 2
+    all_results = []
+
+    for corpus in corpus_data:
+        # Get results up to index size
+        k = min(large_k, corpus['index'].ntotal)
+        distances, indices = corpus['index'].search(query_emb, k)
+
+        for idx, score in zip(indices[0], distances[0]):
+            # Filter by minimum score threshold
+            if score >= min_score:
+                chunk = corpus['chunks'][idx]
+                line_range = corpus['line_ranges'][idx]
+                source = corpus['source']
+
+                all_results.append({
+                    'corpus': corpus['name'],
+                    'location': f"{source}:{line_range[0]}-{line_range[1]}",
+                    'score': float(score),
+                    'chunk': chunk
+                })
+
+    # Sort by score (highest first)
+    all_results.sort(key=lambda x: x['score'], reverse=True)
+
+    # Limit results if requested
+    if max_results is not None:
+        all_results = all_results[:max_results]
+
+    return all_results
+
+
+def execute_query(query_spec, use_gpu=None, verbose=False):
+    """
+    Execute a JSON-formatted boolean query on SEAR corpuses.
+
+    Supports complex nested boolean operations combining multiple queries.
+
+    Query Format:
+        Simple query (just retrieve):
+        {
+            "query": "authentication security",
+            "corpuses": ["backend", "docs"],  # optional
+            "min_score": 0.3,                 # optional, default 0.3
+            "max_results": 100,               # optional, default None
+            "sort": true,                     # optional, default true
+            "merge_adjacent": true            # optional, default true
+        }
+
+        Union (combine multiple queries):
+        {
+            "operation": "union",
+            "queries": ["security authentication", "user login"]
+        }
+
+        Intersect (overlapping results only):
+        {
+            "operation": "intersect",
+            "queries": ["API endpoints", "security"]
+        }
+
+        Difference (exclude results):
+        {
+            "operation": "difference",
+            "query": "security patterns",
+            "exclude": "deprecated legacy"
+        }
+
+        Nested operations:
+        {
+            "operation": "difference",
+            "left": {
+                "operation": "union",
+                "queries": ["security", "authentication"]
+            },
+            "right": {
+                "query": "deprecated"
+            }
+        }
+
+    Args:
+        query_spec: Dict containing query specification (see format above)
+        use_gpu: Enable GPU acceleration (None=auto, True=force, False=disable)
+        verbose: Print execution details
+
+    Returns:
+        list: Processed chunks with keys: corpus, location, score, chunk
+
+    Raises:
+        ValueError: If query format is invalid or required fields missing
+
+    Example:
+        >>> # Simple union query
+        >>> query = {
+        ...     "operation": "union",
+        ...     "queries": ["authentication", "authorization"],
+        ...     "corpuses": ["backend"],
+        ...     "min_score": 0.35
+        ... }
+        >>> results = execute_query(query, verbose=True)
+
+        >>> # Complex nested query: (A ∪ B) - C
+        >>> query = {
+        ...     "operation": "difference",
+        ...     "left": {
+        ...         "operation": "union",
+        ...         "queries": ["security patterns", "best practices"]
+        ...     },
+        ...     "right": {
+        ...         "query": "deprecated outdated"
+        ...     },
+        ...     "sort": True,
+        ...     "merge_adjacent": True
+        ... }
+        >>> results = execute_query(query, verbose=True)
+    """
+    import json
+
+    # Validate input is a dict
+    if not isinstance(query_spec, dict):
+        raise ValueError("query_spec must be a dictionary")
+
+    # Extract common options with defaults
+    options = {
+        'corpuses': query_spec.get('corpuses', None),
+        'min_score': query_spec.get('min_score', 0.3),
+        'max_results': query_spec.get('max_results', None),
+        'sort': query_spec.get('sort', True),
+        'merge_adjacent': query_spec.get('merge_adjacent', True)
+    }
+
+    if verbose:
+        print(f"📋 Executing query with options: {options}")
+
+    # Recursive query execution
+    def _execute_node(node, depth=0):
+        """Recursively execute a query node."""
+        indent = "  " * depth
+
+        if verbose:
+            print(f"{indent}🔍 Processing node at depth {depth}")
+
+        # Check if this is a simple query (no operation)
+        if 'operation' not in node:
+            # Simple query - just retrieve chunks
+            if 'query' not in node:
+                raise ValueError("Query node must have either 'operation' or 'query' field")
+
+            query_str = node['query']
+            if verbose:
+                print(f"{indent}  📝 Simple query: '{query_str}'")
+
+            results = _retrieve_chunks_only(
+                query=query_str,
+                corpuses=options['corpuses'],
+                min_score=options['min_score'],
+                max_results=options['max_results'],
+                use_gpu=use_gpu,
+                verbose=False
+            )
+
+            if verbose:
+                print(f"{indent}  ✓ Retrieved {len(results)} chunks")
+
+            return results
+
+        # Operation-based query
+        operation = node['operation'].lower()
+
+        if operation == 'union':
+            # Union: combine multiple queries
+            if 'queries' not in node:
+                raise ValueError("Union operation requires 'queries' field")
+
+            queries = node['queries']
+            if not isinstance(queries, list) or len(queries) < 2:
+                raise ValueError("Union requires at least 2 queries")
+
+            if verbose:
+                print(f"{indent}  ∪ Union of {len(queries)} queries")
+
+            # Execute each query
+            result_sets = []
+            for i, q in enumerate(queries):
+                if isinstance(q, str):
+                    # Simple string query
+                    if verbose:
+                        print(f"{indent}    Query {i+1}: '{q}'")
+                    results = _retrieve_chunks_only(
+                        query=q,
+                        corpuses=options['corpuses'],
+                        min_score=options['min_score'],
+                        max_results=options['max_results'],
+                        use_gpu=use_gpu,
+                        verbose=False
+                    )
+                elif isinstance(q, dict):
+                    # Nested query
+                    if verbose:
+                        print(f"{indent}    Query {i+1}: <nested>")
+                    results = _execute_node(q, depth + 2)
+                else:
+                    raise ValueError(f"Query must be string or dict, got {type(q)}")
+
+                if verbose:
+                    print(f"{indent}      → {len(results)} chunks")
+                result_sets.append(results)
+
+            # Apply union operation
+            combined = union_results(result_sets)
+            if verbose:
+                print(f"{indent}  ✓ Union result: {len(combined)} chunks")
+
+            return combined
+
+        elif operation == 'intersect':
+            # Intersect: overlapping results only
+            if 'queries' not in node:
+                raise ValueError("Intersect operation requires 'queries' field")
+
+            queries = node['queries']
+            if not isinstance(queries, list) or len(queries) < 2:
+                raise ValueError("Intersect requires at least 2 queries")
+
+            if verbose:
+                print(f"{indent}  ∩ Intersect of {len(queries)} queries")
+
+            # Execute each query
+            result_sets = []
+            for i, q in enumerate(queries):
+                if isinstance(q, str):
+                    if verbose:
+                        print(f"{indent}    Query {i+1}: '{q}'")
+                    results = _retrieve_chunks_only(
+                        query=q,
+                        corpuses=options['corpuses'],
+                        min_score=options['min_score'],
+                        max_results=options['max_results'],
+                        use_gpu=use_gpu,
+                        verbose=False
+                    )
+                elif isinstance(q, dict):
+                    if verbose:
+                        print(f"{indent}    Query {i+1}: <nested>")
+                    results = _execute_node(q, depth + 2)
+                else:
+                    raise ValueError(f"Query must be string or dict, got {type(q)}")
+
+                if verbose:
+                    print(f"{indent}      → {len(results)} chunks")
+                result_sets.append(results)
+
+            # Apply intersect operation (pairwise for multiple sets)
+            # Start with first set, then intersect with each subsequent set
+            combined = result_sets[0]
+            for i in range(1, len(result_sets)):
+                combined = intersect_results(combined, result_sets[i])
+
+            if verbose:
+                print(f"{indent}  ✓ Intersect result: {len(combined)} chunks")
+
+            return combined
+
+        elif operation == 'difference':
+            # Difference: A - B (exclude B from A)
+            # Support two formats:
+            # 1. "left"/"right" for nested operations
+            # 2. "query"/"exclude" for simple queries
+
+            if 'left' in node and 'right' in node:
+                # Nested format
+                if verbose:
+                    print(f"{indent}  - Difference (left - right)")
+                    print(f"{indent}    Left operand:")
+
+                left_results = _execute_node(node['left'], depth + 2)
+
+                if verbose:
+                    print(f"{indent}      → {len(left_results)} chunks")
+                    print(f"{indent}    Right operand:")
+
+                right_results = _execute_node(node['right'], depth + 2)
+
+                if verbose:
+                    print(f"{indent}      → {len(right_results)} chunks")
+
+            elif 'query' in node and 'exclude' in node:
+                # Simple format
+                main_query = node['query']
+                exclude_query = node['exclude']
+
+                if verbose:
+                    print(f"{indent}  - Difference")
+                    print(f"{indent}    Main query: '{main_query}'")
+
+                left_results = _retrieve_chunks_only(
+                    query=main_query,
+                    corpuses=options['corpuses'],
+                    min_score=options['min_score'],
+                    max_results=options['max_results'],
+                    use_gpu=use_gpu,
+                    verbose=False
+                )
+
+                if verbose:
+                    print(f"{indent}      → {len(left_results)} chunks")
+                    print(f"{indent}    Exclude query: '{exclude_query}'")
+
+                right_results = _retrieve_chunks_only(
+                    query=exclude_query,
+                    corpuses=options['corpuses'],
+                    min_score=options['min_score'],
+                    max_results=options['max_results'],
+                    use_gpu=use_gpu,
+                    verbose=False
+                )
+
+                if verbose:
+                    print(f"{indent}      → {len(right_results)} chunks")
+            else:
+                raise ValueError(
+                    "Difference operation requires either 'left'/'right' or 'query'/'exclude' fields"
+                )
+
+            # Apply difference operation
+            semantic = query_spec.get('semantic', False)
+            threshold = query_spec.get('threshold', 0.7)
+            result = difference_results(left_results, right_results, semantic=semantic, threshold=threshold)
+
+            if verbose:
+                semantic_msg = f" (semantic, threshold={threshold})" if semantic else ""
+                print(f"{indent}  ✓ Difference result: {len(result)} chunks{semantic_msg}")
+
+            return result
+
+        else:
+            raise ValueError(f"Unknown operation: {operation}. Supported: union, intersect, difference")
+
+    # Execute the query tree
+    if verbose:
+        print("=" * 80)
+        print("🚀 Starting query execution")
+        print("=" * 80)
+
+    results = _execute_node(query_spec)
+
+    if verbose:
+        print("=" * 80)
+        print(f"✓ Query execution complete: {len(results)} total chunks")
+
+    # Post-processing: sort and merge if requested
+    if options['sort'] and len(results) > 0:
+        if verbose:
+            print("📊 Sorting results by document order...")
+        results = sort_by_document_order(results)
+        if verbose:
+            print(f"  ✓ Sorted {len(results)} chunks")
+
+    if options['merge_adjacent'] and len(results) > 0:
+        if verbose:
+            print("🔗 Merging adjacent chunks...")
+        original_count = len(results)
+        results = merge_adjacent_chunks(results)
+        if verbose:
+            print(f"  ✓ Merged {original_count} → {len(results)} chunks")
+
+    if verbose:
+        print("=" * 80)
+        print(f"🎉 Final result: {len(results)} chunks")
+        print("=" * 80)
+
+    return results
